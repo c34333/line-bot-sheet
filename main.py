@@ -12,9 +12,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 app = Flask(__name__)
 
 # LINE APIの設定（環境変数から取得）
-LINE_CHANNEL_ACCESS_TOKEN = '/FkVb/dexhEuFsB74xXlu81VY6v1eAI7HdKLDcMQpVQ1QQYtDvqNOCoVlfL0jx5Y3rHbtivI9gslRT/njwTihE6Ru/iXhGyNMzLvvxnFSuJsy3HgW5egfmnx8R9ydFWbaKdpezv3yIPosAUlU6Vl5AdB04t89/1O/w1cDnyilFU='
-LINE_CHANNEL_SECRET = '74a58afe4666258e4a64610534d5eacc'
-
+LINE_CHANNEL_ACCESS_TOKEN = os.environ['LINE_CHANNEL_ACCESS_TOKEN']
+LINE_CHANNEL_SECRET = os.environ['LINE_CHANNEL_SECRET']
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
