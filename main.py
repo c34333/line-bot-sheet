@@ -49,4 +49,4 @@ def handle_message(event):
     print(f'📝 {user_id} が "{text}" と送信 → スプレッドシートに追加！')
 
 if __name__ == "__main__":
-    app.run(port=5000)
+    app.run(host="0.0.0.0", port=5000)
