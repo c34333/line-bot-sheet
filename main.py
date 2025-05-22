@@ -64,17 +64,12 @@ def handle_message(event):
 
         elif session["step"] == "awaiting_introducer":
             session["introducer"] = text
-            session["step"] = "awaiting_content"
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(
-                text="③ 内容を入力してください（スキップ可）",
-                quick_reply=QuickReply(items=[
-                    QuickReplyButton(action=MessageAction(label="スキップ", text="スキップ"))
-                ])
-            ))
+            session["step"] = "awaiting_site"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="③ 現場名を入力してください"))
             return
 
-        elif session["step"] == "awaiting_content":
-            session["content"] = "" if text == "スキップ" else text
+        elif session["step"] == "awaiting_site":
+            session["site"] = text
             session["step"] = "awaiting_branch"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(
                 text="④ 拠点名を選んでください",
@@ -88,12 +83,17 @@ def handle_message(event):
 
         elif session["step"] == "awaiting_branch":
             session["branch"] = f":{text}"
-            session["step"] = "awaiting_site"
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⑤ 現場名を入力してください"))
+            session["step"] = "awaiting_content"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(
+                text="⑤ 依頼内容・ポイントを入力してください（スキップ可）",
+                quick_reply=QuickReply(items=[
+                    QuickReplyButton(action=MessageAction(label="スキップ", text="スキップ"))
+                ])
+            ))
             return
 
-        elif session["step"] == "awaiting_site":
-            session["site"] = text
+        elif session["step"] == "awaiting_content":
+            session["content"] = "" if text == "スキップ" else text
             session["step"] = "awaiting_month"
             months = [QuickReplyButton(action=MessageAction(label=f"{i}月", text=f"{i}月")) for i in range(1, 13)]
             months.insert(0, QuickReplyButton(action=MessageAction(label="未定", text="未定")))
@@ -132,24 +132,25 @@ def handle_message(event):
 
             for row in range(1, 2001):
                 if sheet.cell(row, 2).value in [None, ""]:
+                    case_number = sheet.cell(row, 1).value  # A列（番号）を取得
                     sheet.update_cell(row, 2, "新規追加")
                     sheet.update_cell(row, 5, session.get("company", ""))
                     sheet.update_cell(row, 6, session.get("branch", ""))
                     sheet.update_cell(row, 8, session.get("site", ""))
                     sheet.update_cell(row, 9, session.get("month", ""))
                     sheet.update_cell(row, 10, session.get("worker", ""))
-                    sheet.update_cell(row, 11, session.get("introducer", ""))
-                    sheet.update_cell(row, 12, session.get("content", ""))
-                    sheet.update_cell(row, 13, session.get("etc", ""))
+                    # ②③⑧は転記しない
 
                     line_bot_api.reply_message(event.reply_token, [
-                        TextSendMessage(text=f"登録完了しました！（案件番号：{row}）"),
+                        TextSendMessage(text=f"登録完了しました！（案件番号：{case_number}）"),
                         TextSendMessage(text=(
                             f"①会社名：{session.get('company', '')}\n"
                             f"②元請・紹介者名：{session.get('introducer', '')}\n"
-                            f"③内容：{session.get('content', '')}\n"
-                            f"⑤現場名：{session.get('site', '')}\n"
+                            f"③現場名：{session.get('site', '')}\n"
+                            f"④拠点名：{session.get('branch', '')}\n"
+                            f"⑤依頼内容・ポイント：{session.get('content', '')}\n"
                             f"⑥作業予定月：{session.get('month', '')}\n"
+                            f"⑦対応者：{session.get('worker', '')}\n"
                             f"⑧その他：{session.get('etc', '')}"
                         ))
                     ])
