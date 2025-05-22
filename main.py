@@ -111,9 +111,13 @@ def handle_message(event):
     elif step == "worktype":
         session["worktype"] = text
         session["step"] = "month"
-        print(f"[STEP] worktype → month, 選択: {text}")
-        send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください", ["未定"] + [f"{i}月" for i in range(1, 13)] + ["キャンセル"])
+        session["month_page"] = 1
+        send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（1/2）", ["未定", "1月", "2月", "3月", "4月", "5月", "6月", "次へ ➡"])
     elif step == "month":
+        if text == "次へ ➡":
+            session["month_page"] = 2
+            send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（2/2）", ["7月", "8月", "9月", "10月", "11月", "12月", "キャンセル"])
+            return
         session["month"] = f"2025年{text}" if text != "未定" else "未定"
         session["step"] = "type"
         send_quick_reply(event.reply_token, "⑨ 対応者を選んでください", ["自社", "外注", "キャンセル"])
@@ -154,19 +158,10 @@ def handle_message(event):
         del user_sessions[user_id]
 
 def send_quick_reply(token, text, options):
-    quick_items = []
-    for opt in options:
-        quick_items.append(
-            QuickReplyItem(action=MessageAction(label=opt, text=opt))
-        )
+    items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options]
     line_bot_api.reply_message(ReplyMessageRequest(
         reply_token=token,
-        messages=[
-            TextMessage(
-                text=text,
-                quick_reply=QuickReply(items=quick_items)
-            )
-        ]
+        messages=[TextMessage(text=text, quick_reply=QuickReply(items=items))]
     ))
 
 def reply(token, text):
