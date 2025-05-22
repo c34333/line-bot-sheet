@@ -1,3 +1,4 @@
+
 import os
 import json
 import gspread
@@ -20,7 +21,6 @@ from linebot.v3.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
 
-# LINE設定
 LINE_CHANNEL_ACCESS_TOKEN = os.environ['LINE_CHANNEL_ACCESS_TOKEN']
 LINE_CHANNEL_SECRET = os.environ['LINE_CHANNEL_SECRET']
 
@@ -29,14 +29,12 @@ api_client = ApiClient(configuration)
 line_bot_api = MessagingApi(api_client)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# Google Sheets設定
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 credentials_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, scope)
 gc = gspread.authorize(credentials)
 sheet = gc.open('LINEログ').sheet1
 
-# ユーザーセッション管理
 user_sessions = {}
 
 def find_next_available_row():
@@ -45,6 +43,7 @@ def find_next_available_row():
         if i >= len(col_b) or col_b[i] == '':
             return i + 1
     return None
+
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
@@ -64,7 +63,6 @@ def handle_message(event):
     group_id = getattr(event.source, 'group_id', None)
     text = event.message.text.strip()
 
-    # ID確認機能
     if text == "あなたのIDは？":
         msg = f"🆔 あなたのユーザーID:\n{user_id}"
         if group_id:
@@ -72,7 +70,6 @@ def handle_message(event):
         reply(event.reply_token, msg)
         return
 
-    # セッションキャンセル
     if text == "キャンセル":
         if user_id in user_sessions:
             del user_sessions[user_id]
@@ -84,6 +81,7 @@ def handle_message(event):
             user_sessions[user_id] = {"step": "status"}
             send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
         return
+
     session = user_sessions[user_id]
     step = session.get("step")
 
@@ -142,16 +140,19 @@ def handle_message(event):
 
 ① 案件進捗：{session['status']}
 ② 会社名：{session['company']}
-③ 現場名：{session['site']}
-④ 拠点名：{session['branch']}
-⑤ 依頼内容：{session['content']}
-⑥ 施工内容：{session['worktype']}
-⑦ 月：{session['month']}
-⑧ その他：{session['memo']}"""
+③ 元請・紹介者名：{session['client']}
+④ 現場名：{session['site']}
+⑤ 拠点名：{session['branch']}
+⑥ 依頼内容・ポイント：{session['content']}
+⑦ 施工内容：{session['worktype']}
+⑧ 作業予定月：{session['month']}
+⑨ 対応者：{session['type']}
+⑩ その他：{session['memo']}"""
             reply(event.reply_token, summary)
         else:
             reply(event.reply_token, "⚠ スプレッドシートの空きが見つかりませんでした。")
         del user_sessions[user_id]
+
 def send_quick_reply(token, text, options):
     items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options]
     line_bot_api.reply_message(ReplyMessageRequest(
