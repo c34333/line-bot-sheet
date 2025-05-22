@@ -1,4 +1,3 @@
-
 import os
 import json
 import gspread
@@ -109,18 +108,16 @@ def handle_message(event):
         session["content"] = "" if text == "スキップ" else text
         session["step"] = "worktype"
         send_quick_reply(event.reply_token, "⑦ 施工内容を選んでください", ["洗浄", "清掃", "調査", "工事", "点検", "塗装", "修理", "キャンセル"])
-     elif step == "worktype":
+    elif step == "worktype":
         print(f"[DEBUG] step=worktype, text={text}")
         session["worktype"] = text
         session["step"] = "month"
         send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください", ["未定"] + [f"{i}月" for i in range(1, 13)] + ["キャンセル"])
-
     elif step == "month":
         print(f"[DEBUG] step=month, text={text}")
         session["month"] = f"2025年{text}" if text != "未定" else "未定"
         session["step"] = "type"
         send_quick_reply(event.reply_token, "⑨ 対応者を選んでください", ["自社", "外注", "キャンセル"])
-
     elif step == "type":
         session["type"] = text
         session["step"] = "memo"
@@ -181,5 +178,5 @@ def format_status(status):
         return "新規追加"
 
 if __name__ == "__main__":
-    print(">>> Flask App Starting with Debug Logging <<<")
+    print(">>> Flask App Starting <<<")
     app.run(host="0.0.0.0", port=5000)
