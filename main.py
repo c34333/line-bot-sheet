@@ -112,10 +112,13 @@ def handle_message(event):
     elif step == "worktype":
         session["worktype"] = text
         session["step"] = "month"
-        send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください", ["未定"] + [f"{i}月" for i in range(1,13)] + ["キャンセル"])
+        print(f"[DEBUG] 施工内容を選択: {text}")
+        send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください", ["未定"] + [f"{i}月" for i in range(1, 13)] + ["キャンセル"])
+
     elif step == "month":
         session["month"] = f"2025年{text}" if text != "未定" else "未定"
         session["step"] = "type"
+        print(f"[DEBUG] 月を選択: {text}")
         send_quick_reply(event.reply_token, "⑨ 対応者を選んでください", ["自社", "外注", "キャンセル"])
     elif step == "type":
         session["type"] = text
