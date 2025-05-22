@@ -1,30 +1,50 @@
-from flask import Flask, request, abort
 import os
 import json
 import gspread
+from flask import Flask, request, abort
 from oauth2client.service_account import ServiceAccountCredentials
+
 from linebot.v3.webhook import WebhookHandler
-from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessage, QuickReply, QuickReplyItem, MessageAction
+from linebot.v3.messaging import (
+    Configuration,
+    ApiClient,
+    MessagingApi,
+    ReplyMessageRequest,
+    TextMessage,
+    QuickReply,
+    QuickReplyItem,
+    MessageAction
+)
 from linebot.v3.exceptions import InvalidSignatureError
 
-# Flaskアプリ
 app = Flask(__name__)
 
-# LINE APIの設定（環境変数から取得）
+# LINEの設定
 LINE_CHANNEL_ACCESS_TOKEN = os.environ['LINE_CHANNEL_ACCESS_TOKEN']
 LINE_CHANNEL_SECRET = os.environ['LINE_CHANNEL_SECRET']
 
-line_bot_api = MessagingApi(channel_access_token=LINE_CHANNEL_ACCESS_TOKEN)
+configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
+api_client = ApiClient(configuration)
+line_bot_api = MessagingApi(api_client)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# Google Sheets認証
+# Google Sheets 設定
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 credentials_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, scope)
 gc = gspread.authorize(credentials)
 sheet = gc.open('LINEログ').sheet1
 
+# ユーザーごとの入力状況を記録
 user_sessions = {}
+
+# スプレッドシートの空いている行を取得（B列が空欄）
+def find_next_available_row():
+    col_b = sheet.col_values(2)
+    for i in range(1, 2001):
+        if i >= len(col_b) or col_b[i] == '':
+            return i + 1  # 1-indexed
+    return None
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -36,112 +56,106 @@ def callback():
         abort(400)
     return 'OK'
 
-@handler.add(event_type='message')
+@handler.add(event_type="message")
 def handle_message(event):
     user_id = event.source.user_id
     text = event.message.text.strip()
 
-    def reply(reply_token, messages):
-        if isinstance(messages, list):
-            line_bot_api.reply_message(ReplyMessageRequest(reply_token=reply_token, messages=messages))
-        else:
-            line_bot_api.reply_message(ReplyMessageRequest(reply_token=reply_token, messages=[messages]))
-
-    def text_msg(text):
-        return TextMessage(text=text)
-
-    def quick_reply_msg(prompt, options):
-        return TextMessage(
-            text=prompt,
-            quick_reply=QuickReply(items=[QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options])
-        )
-
-    if text == "新規":
-        user_sessions[user_id] = {"step": "awaiting_status"}
-        reply(event.reply_token, quick_reply_msg("案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期"]))
+    if user_id not in user_sessions:
+        if text == "新規":
+            user_sessions[user_id] = {"step": "status"}
+            send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期"])
         return
 
-    if user_id in user_sessions:
-        session = user_sessions[user_id]
+    session = user_sessions[user_id]
+    step = session.get("step")
 
-        if session["step"] == "awaiting_status":
-            session["status"] = text
-            session["step"] = "awaiting_company"
-            reply(event.reply_token, text_msg("① 会社名を入力してください"))
-            return
+    if step == "status":
+        session["status"] = text
+        session["step"] = "company"
+        reply(event.reply_token, "② 会社名を入力してください")
+    elif step == "company":
+        session["company"] = text
+        session["step"] = "client"
+        reply(event.reply_token, "③ 元請・紹介者名を入力してください")
+    elif step == "client":
+        session["client"] = text
+        session["step"] = "site"
+        reply(event.reply_token, "④ 現場名を入力してください")
+    elif step == "site":
+        session["site"] = text
+        session["step"] = "branch"
+        send_quick_reply(event.reply_token, "⑤ 拠点名を選んでください", ["本社", "関東", "前橋"])
+    elif step == "branch":
+        session["branch"] = f":{text}"
+        session["step"] = "content"
+        send_quick_reply(event.reply_token, "⑥ 依頼内容・ポイントを入力してください（スキップ可）", ["スキップ"])
+    elif step == "content":
+        session["content"] = "" if text == "スキップ" else text
+        session["step"] = "month"
+        send_quick_reply(event.reply_token, "⑦ 作業予定月を選んでください", ["未定"] + [f"{i}月" for i in range(1,13)])
+    elif step == "month":
+        session["month"] = f"2025年{text}" if text != "未定" else "未定"
+        session["step"] = "type"
+        send_quick_reply(event.reply_token, "⑧ 対応者を選んでください", ["自社", "外注"])
+    elif step == "type":
+        session["type"] = text
+        session["step"] = "memo"
+        send_quick_reply(event.reply_token, "⑨ その他入力項目があれば入力してください（スキップ可）", ["スキップ"])
+    elif step == "memo":
+        session["memo"] = "" if text == "スキップ" else text
 
-        elif session["step"] == "awaiting_company":
-            session["company"] = text
-            session["step"] = "awaiting_introducer"
-            reply(event.reply_token, text_msg("② 元請・紹介者名を入力してください"))
-            return
+        # スプレッドシートに転記
+        row = find_next_available_row()
+        if row:
+            sheet.update_cell(row, 2, format_status(session["status"]))
+            sheet.update_cell(row, 5, session["company"])
+            sheet.update_cell(row, 6, session["branch"])
+            sheet.update_cell(row, 8, session["site"])
+            sheet.update_cell(row, 9, session["month"])
+            sheet.update_cell(row, 10, session["type"])
 
-        elif session["step"] == "awaiting_introducer":
-            session["introducer"] = text
-            session["step"] = "awaiting_site"
-            reply(event.reply_token, text_msg("③ 現場名を入力してください"))
-            return
+            # A列番号取得
+            cell_value = sheet.cell(row, 1).value or str(row - 1)
 
-        elif session["step"] == "awaiting_site":
-            session["site"] = text
-            session["step"] = "awaiting_branch"
-            reply(event.reply_token, quick_reply_msg("④ 拠点名を選んでください", ["本社", "関東", "前橋"]))
-            return
+            # 完了メッセージ＋入力内容要約
+            summary = f"""登録完了しました！（案件番号：{cell_value}）
 
-        elif session["step"] == "awaiting_branch":
-            session["branch"] = f":{text}"
-            session["step"] = "awaiting_content"
-            reply(event.reply_token, quick_reply_msg("⑤ 依頼内容・ポイントを入力してください（スキップ可）", ["スキップ"]))
-            return
+① 案件進捗：{session['status']}
+② 会社名：{session['company']}
+③ 現場名：{session['site']}
+④ 拠点名：{session['branch']}
+⑤ 依頼内容：{session['content']}
+⑥ 月：{session['month']}
+⑦ その他：{session['memo']}"""
+            reply(event.reply_token, summary)
+        else:
+            reply(event.reply_token, "⚠ スプレッドシートの空きが見つかりませんでした。")
+        del user_sessions[user_id]
 
-        elif session["step"] == "awaiting_content":
-            session["content"] = "" if text == "スキップ" else text
-            session["step"] = "awaiting_month"
-            reply(event.reply_token, quick_reply_msg("⑥ 作業予定月を選択してください", ["未定"] + [f"{i}月" for i in range(1, 13)]))
-            return
+# 補助関数
+def send_quick_reply(token, text, options):
+    items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options]
+    line_bot_api.reply_message(ReplyMessageRequest(
+        reply_token=token,
+        messages=[TextMessage(text=text, quick_reply=QuickReply(items=items))]
+    ))
 
-        elif session["step"] == "awaiting_month":
-            session["month"] = "未定" if text == "未定" else f"2025年{text}"
-            session["step"] = "awaiting_worker"
-            reply(event.reply_token, quick_reply_msg("⑦ 対応者を選択してください", ["自社", "外注"]))
-            return
+def reply(token, text):
+    line_bot_api.reply_message(ReplyMessageRequest(
+        reply_token=token,
+        messages=[TextMessage(text=text)]
+    ))
 
-        elif session["step"] == "awaiting_worker":
-            session["worker"] = text
-            session["step"] = "awaiting_etc"
-            reply(event.reply_token, quick_reply_msg("⑧ その他入力項目があれば入れてください（スキップ可）", ["スキップ"]))
-            return
-
-        elif session["step"] == "awaiting_etc":
-            session["etc"] = "" if text == "スキップ" else text
-            session["step"] = "done"
-
-            for row in range(1, 2001):
-                if sheet.cell(row, 2).value in [None, ""]:
-                    case_number = sheet.cell(row, 1).value
-                    sheet.update_cell(row, 2, session.get("status", ""))
-                    sheet.update_cell(row, 5, session.get("company", ""))
-                    sheet.update_cell(row, 6, session.get("branch", ""))
-                    sheet.update_cell(row, 8, session.get("site", ""))
-                    sheet.update_cell(row, 9, session.get("month", ""))
-                    sheet.update_cell(row, 10, session.get("worker", ""))
-                    reply(event.reply_token, [
-                        text_msg(f"登録完了しました！（案件番号：{case_number}）"),
-                        text_msg(
-                            f"①会社名：{session.get('company', '')}\n"
-                            f"②元請・紹介者名：{session.get('introducer', '')}\n"
-                            f"③現場名：{session.get('site', '')}\n"
-                            f"④拠点名：{session.get('branch', '')}\n"
-                            f"⑤依頼内容・ポイント：{session.get('content', '')}\n"
-                            f"⑥作業予定月：{session.get('month', '')}\n"
-                            f"⑦対応者：{session.get('worker', '')}\n"
-                            f"⑧その他：{session.get('etc', '')}"
-                        )
-                    ])
-                    break
-            return
-
-    print(f"📝 {user_id} が \"{text}\" と送信 → 対応外メッセージ")
+def format_status(status):
+    if status == "3:受注":
+        return "3:受注"
+    elif status == "4:作業完了":
+        return "4:作業完了"
+    elif status == "定期":
+        return "定期"
+    else:
+        return "新規追加"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
