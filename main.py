@@ -4,7 +4,7 @@ import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from linebot.v3.webhook import WebhookHandler
-from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessageContent, QuickReply, QuickReplyItem, MessageAction
+from linebot.v3.messaging import MessagingApi, ReplyMessageRequest, TextMessage, QuickReply, QuickReplyItem, MessageAction
 from linebot.v3.exceptions import InvalidSignatureError
 
 # Flaskアプリ
@@ -48,23 +48,29 @@ def handle_message(event):
             line_bot_api.reply_message(ReplyMessageRequest(reply_token=reply_token, messages=[messages]))
 
     def text_msg(text):
-        return TextMessageContent(text=text)
+        return TextMessage(text=text)
 
     def quick_reply_msg(prompt, options):
-        return TextMessageContent(
+        return TextMessage(
             text=prompt,
             quick_reply=QuickReply(items=[QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options])
         )
 
     if text == "新規":
-        user_sessions[user_id] = {"step": "awaiting_company"}
-        reply(event.reply_token, text_msg("① 会社名を入力してください"))
+        user_sessions[user_id] = {"step": "awaiting_status"}
+        reply(event.reply_token, quick_reply_msg("案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期"]))
         return
 
     if user_id in user_sessions:
         session = user_sessions[user_id]
 
-        if session["step"] == "awaiting_company":
+        if session["step"] == "awaiting_status":
+            session["status"] = text
+            session["step"] = "awaiting_company"
+            reply(event.reply_token, text_msg("① 会社名を入力してください"))
+            return
+
+        elif session["step"] == "awaiting_company":
             session["company"] = text
             session["step"] = "awaiting_introducer"
             reply(event.reply_token, text_msg("② 元請・紹介者名を入力してください"))
@@ -113,7 +119,7 @@ def handle_message(event):
             for row in range(1, 2001):
                 if sheet.cell(row, 2).value in [None, ""]:
                     case_number = sheet.cell(row, 1).value
-                    sheet.update_cell(row, 2, "新規追加")
+                    sheet.update_cell(row, 2, session.get("status", ""))
                     sheet.update_cell(row, 5, session.get("company", ""))
                     sheet.update_cell(row, 6, session.get("branch", ""))
                     sheet.update_cell(row, 8, session.get("site", ""))
@@ -123,12 +129,12 @@ def handle_message(event):
                         text_msg(f"登録完了しました！（案件番号：{case_number}）"),
                         text_msg(
                             f"①会社名：{session.get('company', '')}\n"
-                            f"②元請名：{session.get('introducer', '')}\n"
+                            f"②元請・紹介者名：{session.get('introducer', '')}\n"
                             f"③現場名：{session.get('site', '')}\n"
                             f"④拠点名：{session.get('branch', '')}\n"
-                            f"⑤内容：{session.get('content', '')}\n"
-                            f"⑥作業月：{session.get('month', '')}\n"
-                            f"⑦対応：{session.get('worker', '')}\n"
+                            f"⑤依頼内容・ポイント：{session.get('content', '')}\n"
+                            f"⑥作業予定月：{session.get('month', '')}\n"
+                            f"⑦対応者：{session.get('worker', '')}\n"
                             f"⑧その他：{session.get('etc', '')}"
                         )
                     ])
