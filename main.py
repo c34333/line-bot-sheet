@@ -15,6 +15,7 @@ from linebot.v3.messaging import (
     QuickReplyItem,
     MessageAction
 )
+from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
@@ -56,8 +57,11 @@ def callback():
         abort(400)
     return 'OK'
 
-@handler.add(event_type="message")
+@handler.add(MessageEvent)
 def handle_message(event):
+    if not isinstance(event.message, TextMessageContent):
+        return
+
     user_id = event.source.user_id
     text = event.message.text.strip()
 
@@ -115,10 +119,9 @@ def handle_message(event):
             sheet.update_cell(row, 9, session["month"])
             sheet.update_cell(row, 10, session["type"])
 
-            # A列番号取得
+            # A列の番号（入力済のもの）を取得
             cell_value = sheet.cell(row, 1).value or str(row - 1)
 
-            # 完了メッセージ＋入力内容要約
             summary = f"""登録完了しました！（案件番号：{cell_value}）
 
 ① 案件進捗：{session['status']}
