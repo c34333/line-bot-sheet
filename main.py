@@ -45,7 +45,6 @@ def find_next_available_row():
         if i >= len(col_b) or col_b[i] == '':
             return i + 1
     return None
-
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
@@ -85,22 +84,21 @@ def handle_message(event):
             user_sessions[user_id] = {"step": "status"}
             send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
         return
-
     session = user_sessions[user_id]
     step = session.get("step")
 
     if step == "status":
         session["status"] = text
         session["step"] = "company"
-        reply(event.reply_token, "② 会社名を入力してください")
+        reply(event.reply_token, "② 会社名を入力してください（キャンセル可）")
     elif step == "company":
         session["company"] = text
         session["step"] = "client"
-        reply(event.reply_token, "③ 元請・紹介者名を入力してください")
+        reply(event.reply_token, "③ 元請・紹介者名を入力してください（キャンセル可）")
     elif step == "client":
         session["client"] = text
         session["step"] = "site"
-        reply(event.reply_token, "④ 現場名を入力してください")
+        reply(event.reply_token, "④ 現場名を入力してください（キャンセル可）")
     elif step == "site":
         session["site"] = text
         session["step"] = "branch"
@@ -147,13 +145,13 @@ def handle_message(event):
 ③ 現場名：{session['site']}
 ④ 拠点名：{session['branch']}
 ⑤ 依頼内容：{session['content']}
-⑥ 月：{session['month']}
-⑦ その他：{session['memo']}"""
+⑥ 施工内容：{session['worktype']}
+⑦ 月：{session['month']}
+⑧ その他：{session['memo']}"""
             reply(event.reply_token, summary)
         else:
             reply(event.reply_token, "⚠ スプレッドシートの空きが見つかりませんでした。")
         del user_sessions[user_id]
-
 def send_quick_reply(token, text, options):
     items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options]
     line_bot_api.reply_message(ReplyMessageRequest(
