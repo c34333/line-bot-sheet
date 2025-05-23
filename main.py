@@ -36,6 +36,11 @@ sheet = gc.open('LINEログ').sheet1
 
 user_sessions = {}
 
+user_id_to_name = {
+    "Udb588897b58f1332808f922bfdd79025": "酒井",
+    "U9ba215a58fbd1758c796fd0deff363c0": "諸橋"
+}
+
 def find_next_available_row():
     col_b = sheet.col_values(2)
     for i in range(1, 2001):
@@ -61,6 +66,15 @@ def handle_message(event):
     user_id = event.source.user_id
     group_id = getattr(event.source, 'group_id', None)
     text = event.message.text.strip()
+
+    if user_id in user_id_to_name:
+        name = user_id_to_name[user_id]
+        data = sheet.get_all_values()
+        for i, row in enumerate(data):
+            if len(row) < 2 or row[1].strip() == "":
+                sheet.update_cell(i + 1, 3, name)
+                reply(event.reply_token, f"✅ {name} さんとして登録しました（{i + 1}行目）")
+                return
 
     if text == "あなたのIDは？":
         msg = f"🆔 あなたのユーザーID:\n{user_id}"
@@ -131,7 +145,7 @@ def handle_message(event):
         row = find_next_available_row()
         if row:
             sheet.update_cell(row, 2, format_status(session["status"]))
-            sheet.update_cell(row, 3, "管理者入力" if user_id in ["Uxxxxxxxxxxxxxx"] else "")
+            sheet.update_cell(row, 3, user_id_to_name.get(user_id, ""))
             sheet.update_cell(row, 5, session["company"])
             sheet.update_cell(row, 6, session["branch"])
             sheet.update_cell(row, 8, session["site"])
