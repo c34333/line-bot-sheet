@@ -62,6 +62,16 @@ def handle_message(event):
     user_id = event.source.user_id
     text = event.message.text.strip()
 
+    # 強制リセットトリガー
+    if text in ["あ", "テスト"]:
+        user_sessions[user_id] = {
+            "step": "inputter",
+            "test_mode": text == "テスト",
+            "inputter_page": 1
+        }
+        send_quick_reply(event.reply_token, "👤 入力者を選択してください（1/2）", ["未定", "諸橋", "酒井", "大塚", "原", "次へ ➡"])
+        return
+
     # ID確認
     if text == "あなたのIDは？":
         msg = f"🆔 あなたのユーザーID:\n{user_id}"
@@ -78,11 +88,9 @@ def handle_message(event):
         reply(event.reply_token, "入力をキャンセルしました。最初からやり直してください。")
         return
 
-    # 初期化（開始トリガー）
-    if user_id not in user_sessions or user_sessions[user_id].get("step") is None:
-        if text in ["あ", "テスト"]:
-            user_sessions[user_id] = {"step": "inputter", "test_mode": text == "テスト", "inputter_page": 1}
-            send_quick_reply(event.reply_token, "👤 入力者を選択してください（1/2）", ["未定", "諸橋", "酒井", "大塚", "原", "次へ ➡"])
+    # セッションがない場合（例外）
+    if user_id not in user_sessions:
+        reply(event.reply_token, "「あ」または「テスト」と入力して最初から始めてください。")
         return
 
     session = user_sessions[user_id]
@@ -141,7 +149,7 @@ def handle_message(event):
         session["memo"] = "" if text == "スキップ" else text
 
         profile = line_bot_api.get_profile(user_id)
-        display_name = profile.display_name  # ← LINEユーザー名
+        display_name = profile.display_name
 
         if session.get("test_mode"):
             a_number = "テスト"
@@ -149,7 +157,7 @@ def handle_message(event):
             row = find_next_available_row()
             if row:
                 sheet.update_cell(row, 2, format_status(session["status"]))
-                sheet.update_cell(row, 3, session["inputter_name"])  # C列に入力者名
+                sheet.update_cell(row, 3, session["inputter_name"])
                 sheet.update_cell(row, 6, session["company"])
                 sheet.update_cell(row, 7, session["branch"])
                 sheet.update_cell(row, 9, session["site"])
