@@ -93,7 +93,7 @@ def handle_message(event):
             session["inputter_page"] = 2
             send_quick_reply(event.reply_token, "👤 入力者を選択してください（2/2）", ["関野", "志賀", "加勢", "藤巻", "キャンセル"])
             return
-        session["name"] = text
+        session["inputter_name"] = text
         session["step"] = "status"
         send_quick_reply(event.reply_token, f"{text}さんですね。\n① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
     elif step == "status":
@@ -140,13 +140,16 @@ def handle_message(event):
     elif step == "memo":
         session["memo"] = "" if text == "スキップ" else text
 
+        profile = line_bot_api.get_profile(user_id)
+        display_name = profile.display_name  # ← LINEユーザー名
+
         if session.get("test_mode"):
             a_number = "テスト"
         else:
             row = find_next_available_row()
             if row:
                 sheet.update_cell(row, 2, format_status(session["status"]))
-                sheet.update_cell(row, 3, session["name"])  # ← C列に入力者名を転記
+                sheet.update_cell(row, 3, session["inputter_name"])  # C列に入力者名
                 sheet.update_cell(row, 6, session["company"])
                 sheet.update_cell(row, 7, session["branch"])
                 sheet.update_cell(row, 9, session["site"])
@@ -159,7 +162,8 @@ def handle_message(event):
                 del user_sessions[user_id]
                 return
 
-        summary = f"{session['name']}さんが案件を登録しました！（案件番号：{a_number}）\n\n" \
+        summary = f"{display_name}さんが案件を登録しました！（案件番号：{a_number}）\n\n" \
+                  f"入力者：{session['inputter_name']}\n" \
                   f"① 案件進捗：{session['status']}\n" \
                   f"② 会社名：{session['company']}\n" \
                   f"③ 元請・紹介者名：{session['client']}\n" \
