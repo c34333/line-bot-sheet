@@ -157,19 +157,18 @@ def handle_message(event):
                 del user_sessions[user_id]
                 return
 
-summary = f"""登録完了しました！（案件番号：{a_number}）
+summary = f"{session['name']}さんが案件を登録しました！（案件番号：{a_number}）\n\n" \
+          f"① 案件進捗：{session['status']}\n" \
+          f"② 会社名：{session['company']}\n" \
+          f"③ 元請・紹介者名：{session['client']}\n" \
+          f"④ 現場名：{session['site']}\n" \
+          f"⑤ 拠点名：{session['branch']}\n" \
+          f"⑥ 依頼内容・ポイント：{session['content']}\n" \
+          f"⑦ 施工内容：{session['worktype']}\n" \
+          f"⑧ 作業予定月：{session['month']}\n" \
+          f"⑨ 対応者：{session['type']}\n" \
+          f"⑩ その他：{session['memo']}"
 
-入力者：{session.get('name', '未設定')}
-① 案件進捗：{session['status']}
-② 会社名：{session['company']}
-③ 元請・紹介者名：{session['client']}
-④ 現場名：{session['site']}
-⑤ 拠点名：{session['branch']}
-⑥ 依頼内容・ポイント：{session['content']}
-⑦ 施工内容：{session['worktype']}
-⑧ 作業予定月：{session['month']}
-⑨ 対応者：{session['type']}
-⑩ その他：{session['memo']}"""
         reply(event.reply_token, summary)
         del user_sessions[user_id]
 
