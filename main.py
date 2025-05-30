@@ -1,5 +1,3 @@
-# main.py（全文）
-
 import os
 import json
 import gspread
@@ -77,16 +75,20 @@ def handle_message(event):
         reply(event.reply_token, "入力をキャンセルしました。最初からやり直してください。")
         return
 
+    # 名前が未登録なら聞く
     if user_id not in user_sessions:
-        if text == "あ":
-            user_sessions[user_id] = {"step": "status"}
-            send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
+        user_sessions[user_id] = {"step": "ask_name"}
+        reply(event.reply_token, "こんにちは！お名前を教えてください（キャンセル可）")
         return
 
     session = user_sessions[user_id]
     step = session.get("step")
 
-    if step == "status":
+    if step == "ask_name":
+        session["name"] = text
+        session["step"] = "status"
+        send_quick_reply(event.reply_token, f"{session['name']}さん、① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
+    elif step == "status":
         session["status"] = text
         session["step"] = "company"
         reply(event.reply_token, "② 会社名を入力してください（キャンセル可）")
@@ -122,7 +124,7 @@ def handle_message(event):
             return
         session["month"] = f"2025年{text}" if text != "未定" else "未定"
         session["step"] = "type"
-        send_quick_reply(event.reply_token, "⑨ 対応者を選んでください", ["自社", "外注", "キャンセル"])
+        send_quick_reply(event.reply_token, "⑨ 対応者を選んでください", ["自社", "外注", "未定", "キャンセル"])
     elif step == "type":
         session["type"] = text
         session["step"] = "memo"
@@ -133,18 +135,13 @@ def handle_message(event):
         row = find_next_available_row()
         if row:
             sheet.update_cell(row, 2, format_status(session["status"]))
-
-            if user_id == "Udb588897b58f1332808f922bfdd79025":
-                sheet.update_cell(row, 3, "酒井")
-            elif user_id == "U9ba215a58fbd1758c796fd0deff363c0":
-                sheet.update_cell(row, 3, "諸橋")
-
-            sheet.update_cell(row, 5, session["company"])
-            sheet.update_cell(row, 6, session["branch"])
-            sheet.update_cell(row, 8, session["site"])
-            sheet.update_cell(row, 9, session["month"])
-            sheet.update_cell(row, 10, session["type"])
-            sheet.update_cell(row, 11, session["worktype"])
+            sheet.update_cell(row, 3, session["name"])  # 入力者名
+            sheet.update_cell(row, 6, session["company"])
+            sheet.update_cell(row, 7, session["branch"])
+            sheet.update_cell(row, 9, session["site"])
+            sheet.update_cell(row, 10, session["month"])
+            sheet.update_cell(row, 11, session["type"])
+            sheet.update_cell(row, 12, session["worktype"])
 
             a_number = sheet.cell(row, 1).value or str(row - 1)
             summary = f"""登録完了しました！（案件番号：{a_number}）
