@@ -89,10 +89,11 @@ def handle_message(event):
     session = user_sessions[user_id]
     step = session.get("step")
 
-    if step == "name":
+       if step == "name":
         session["name"] = text
         session["step"] = "status"
-        send_quick_reply(event.reply_token, f"{text}さん、こんにちは！", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
+        reply(event.reply_token, f"{text}さん、こんにちは！")
+        send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
     elif step == "status":
         session["status"] = text
         session["step"] = "company"
