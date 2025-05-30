@@ -35,6 +35,7 @@ gc = gspread.authorize(credentials)
 sheet = gc.open('LINEログ').sheet1
 
 user_sessions = {}
+user_names = {}
 
 def find_next_available_row():
     col_b = sheet.col_values(2)
@@ -62,10 +63,25 @@ def handle_message(event):
     group_id = getattr(event.source, 'group_id', None)
     text = event.message.text.strip()
 
+    if user_id not in user_names:
+        if user_id not in user_sessions:
+            user_sessions[user_id] = {"step": "name"}
+            reply(event.reply_token, "はじめまして！お名前を教えてください")
+            return
+        elif user_sessions[user_id]["step"] == "name":
+            user_names[user_id] = text
+            user_sessions[user_id] = {"step": "status"}
+            send_quick_reply(event.reply_token, f"{text}さん、こんにちは！
+① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
+            return
+
     if text == "あなたのIDは？":
-        msg = f"🆔 あなたのユーザーID:\n{user_id}"
+        msg = f"🆔 あなたのユーザーID:
+{user_id}"
         if group_id:
-            msg += f"\n👥 グループID:\n{group_id}"
+            msg += f"
+👥 グループID:
+{group_id}"
         reply(event.reply_token, msg)
         return
 
@@ -75,20 +91,16 @@ def handle_message(event):
         reply(event.reply_token, "入力をキャンセルしました。最初からやり直してください。")
         return
 
-    # 名前が未登録なら聞く
     if user_id not in user_sessions:
-        user_sessions[user_id] = {"step": "ask_name"}
-        reply(event.reply_token, "こんにちは！お名前を教えてください（キャンセル可）")
+        if text == "あ":
+            user_sessions[user_id] = {"step": "status"}
+            send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
         return
 
     session = user_sessions[user_id]
     step = session.get("step")
 
-    if step == "ask_name":
-        session["name"] = text
-        session["step"] = "status"
-        send_quick_reply(event.reply_token, f"{session['name']}さん、① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
-    elif step == "status":
+    if step == "status":
         session["status"] = text
         session["step"] = "company"
         reply(event.reply_token, "② 会社名を入力してください（キャンセル可）")
@@ -134,8 +146,9 @@ def handle_message(event):
 
         row = find_next_available_row()
         if row:
+            name = user_names.get(user_id, "")
             sheet.update_cell(row, 2, format_status(session["status"]))
-            sheet.update_cell(row, 3, session["name"])  # 入力者名
+            sheet.update_cell(row, 3, name)
             sheet.update_cell(row, 6, session["company"])
             sheet.update_cell(row, 7, session["branch"])
             sheet.update_cell(row, 9, session["site"])
@@ -144,7 +157,8 @@ def handle_message(event):
             sheet.update_cell(row, 12, session["worktype"])
 
             a_number = sheet.cell(row, 1).value or str(row - 1)
-            summary = f"""登録完了しました！（案件番号：{a_number}）
+            summary = f"""入力者：{name}さん
+登録完了しました！（案件番号：{a_number}）
 
 ① 案件進捗：{session['status']}
 ② 会社名：{session['company']}
