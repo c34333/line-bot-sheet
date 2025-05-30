@@ -89,11 +89,13 @@ def handle_message(event):
     step = session.get("step")
 
     if step == "name":
-        session["name"] = text
+        profile = line_bot_api.get_profile(user_id)
+        display_name = profile.display_name
+        session["name"] = display_name  # 必要ならスプレッドシートに書き込むため保持
         session["step"] = "status"
         send_quick_reply(
             event.reply_token,
-            f"{text}さん、こんにちは！\n① 案件進捗を選んでください",
+            f"{display_name}さん、こんにちは！\n① 案件進捗を選んでください",
             ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"]
         )
     elif step == "status":
@@ -140,7 +142,6 @@ def handle_message(event):
     elif step == "memo":
         session["memo"] = "" if text == "スキップ" else text
 
-        # 転記
         if session.get("test_mode"):
             a_number = "テスト"
         else:
