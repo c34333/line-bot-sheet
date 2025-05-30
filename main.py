@@ -78,26 +78,24 @@ def handle_message(event):
         reply(event.reply_token, "入力をキャンセルしました。最初からやり直してください。")
         return
 
-    # 初期化
+    # 初期化（開始トリガー）
     if user_id not in user_sessions or user_sessions[user_id].get("step") is None:
         if text in ["あ", "テスト"]:
-            user_sessions[user_id] = {"step": "name", "test_mode": text == "テスト"}
-            reply(event.reply_token, "👤 お名前を入力してください（1度だけ聞きます）")
+            user_sessions[user_id] = {"step": "inputter", "test_mode": text == "テスト", "inputter_page": 1}
+            send_quick_reply(event.reply_token, "👤 入力者を選択してください（1/2）", ["未定", "諸橋", "酒井", "大塚", "原", "次へ ➡"])
         return
 
     session = user_sessions[user_id]
     step = session.get("step")
 
-    if step == "name":
-        profile = line_bot_api.get_profile(user_id)
-        display_name = profile.display_name
-        session["name"] = display_name  # 必要ならスプレッドシートに書き込むため保持
+    if step == "inputter":
+        if text == "次へ ➡":
+            session["inputter_page"] = 2
+            send_quick_reply(event.reply_token, "👤 入力者を選択してください（2/2）", ["関野", "志賀", "加勢", "藤巻", "キャンセル"])
+            return
+        session["name"] = text
         session["step"] = "status"
-        send_quick_reply(
-            event.reply_token,
-            f"{display_name}さん、こんにちは！\n① 案件進捗を選んでください",
-            ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"]
-        )
+        send_quick_reply(event.reply_token, f"{text}さんですね。\n① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
     elif step == "status":
         session["status"] = text
         session["step"] = "company"
@@ -148,7 +146,7 @@ def handle_message(event):
             row = find_next_available_row()
             if row:
                 sheet.update_cell(row, 2, format_status(session["status"]))
-                sheet.update_cell(row, 3, session["name"])
+                sheet.update_cell(row, 3, session["name"])  # ← C列に入力者名を転記
                 sheet.update_cell(row, 6, session["company"])
                 sheet.update_cell(row, 7, session["branch"])
                 sheet.update_cell(row, 9, session["site"])
