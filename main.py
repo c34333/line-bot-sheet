@@ -62,11 +62,7 @@ def handle_message(event):
     user_id = event.source.user_id
     text = event.message.text.strip()
 
-    # 名前を記憶し、次回以降に呼びかけ
-    if user_id in user_sessions and 'name' in user_sessions[user_id] and user_sessions[user_id].get("step") is None:
-        send_quick_reply(event.reply_token, f"{user_sessions[user_id]['name']}さん、こんにちは！", ["あ", "テスト"])
-        return
-
+    # ID確認
     if text == "あなたのIDは？":
         msg = f"🆔 あなたのユーザーID:\n{user_id}"
         group_id = getattr(event.source, 'group_id', None)
@@ -75,12 +71,14 @@ def handle_message(event):
         reply(event.reply_token, msg)
         return
 
+    # キャンセル処理
     if text == "キャンセル":
         if user_id in user_sessions:
             del user_sessions[user_id]
         reply(event.reply_token, "入力をキャンセルしました。最初からやり直してください。")
         return
 
+    # 初期化
     if user_id not in user_sessions or user_sessions[user_id].get("step") is None:
         if text in ["あ", "テスト"]:
             user_sessions[user_id] = {"step": "name", "test_mode": text == "テスト"}
@@ -139,6 +137,7 @@ def handle_message(event):
     elif step == "memo":
         session["memo"] = "" if text == "スキップ" else text
 
+        # 転記
         if session.get("test_mode"):
             a_number = "テスト"
         else:
