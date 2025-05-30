@@ -28,6 +28,7 @@ api_client = ApiClient(configuration)
 line_bot_api = MessagingApi(api_client)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
+# Google Sheets setup
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 credentials_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, scope)
@@ -89,7 +90,7 @@ def handle_message(event):
     session = user_sessions[user_id]
     step = session.get("step")
 
-         elif step == "name":
+    if step == "name":
         session["name"] = text
         reply(event.reply_token, f"{text}さん、こんにちは！")
         session["step"] = "status"
@@ -157,17 +158,17 @@ def handle_message(event):
                 del user_sessions[user_id]
                 return
 
-summary = f"{session['name']}さんが案件を登録しました！（案件番号：{a_number}）\n\n" \
-          f"① 案件進捗：{session['status']}\n" \
-          f"② 会社名：{session['company']}\n" \
-          f"③ 元請・紹介者名：{session['client']}\n" \
-          f"④ 現場名：{session['site']}\n" \
-          f"⑤ 拠点名：{session['branch']}\n" \
-          f"⑥ 依頼内容・ポイント：{session['content']}\n" \
-          f"⑦ 施工内容：{session['worktype']}\n" \
-          f"⑧ 作業予定月：{session['month']}\n" \
-          f"⑨ 対応者：{session['type']}\n" \
-          f"⑩ その他：{session['memo']}"
+        summary = f"{session['name']}さんが案件を登録しました！（案件番号：{a_number}）\n\n" \
+                  f"① 案件進捗：{session['status']}\n" \
+                  f"② 会社名：{session['company']}\n" \
+                  f"③ 元請・紹介者名：{session['client']}\n" \
+                  f"④ 現場名：{session['site']}\n" \
+                  f"⑤ 拠点名：{session['branch']}\n" \
+                  f"⑥ 依頼内容・ポイント：{session['content']}\n" \
+                  f"⑦ 施工内容：{session['worktype']}\n" \
+                  f"⑧ 作業予定月：{session['month']}\n" \
+                  f"⑨ 対応者：{session['type']}\n" \
+                  f"⑩ その他：{session['memo']}"
 
         reply(event.reply_token, summary)
         del user_sessions[user_id]
