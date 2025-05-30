@@ -35,7 +35,6 @@ gc = gspread.authorize(credentials)
 sheet = gc.open('LINEログ').sheet1
 
 user_sessions = {}
-user_names = {}
 
 def find_next_available_row():
     col_b = sheet.col_values(2)
@@ -60,28 +59,18 @@ def handle_message(event):
         return
 
     user_id = event.source.user_id
-    group_id = getattr(event.source, 'group_id', None)
     text = event.message.text.strip()
 
-    if user_id not in user_names:
-        if user_id not in user_sessions:
-            user_sessions[user_id] = {"step": "name"}
-            reply(event.reply_token, "はじめまして！お名前を教えてください")
-            return
-        elif user_sessions[user_id]["step"] == "name":
-            user_names[user_id] = text
-            user_sessions[user_id] = {"step": "status"}
-            send_quick_reply(event.reply_token, f"{text}さん、こんにちは！
-① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
-            return
+    # 名前を記憶し、次回以降に呼びかけ
+    if user_id in user_sessions and 'name' in user_sessions[user_id] and user_sessions[user_id].get("step") is None:
+        send_quick_reply(event.reply_token, f"{user_sessions[user_id]['name']}さん、こんにちは！", ["あ", "テスト"])
+        return
 
     if text == "あなたのIDは？":
-        msg = f"🆔 あなたのユーザーID:
-{user_id}"
+        msg = f"🆔 あなたのユーザーID:\n{user_id}"
+        group_id = getattr(event.source, 'group_id', None)
         if group_id:
-            msg += f"
-👥 グループID:
-{group_id}"
+            msg += f"\n👥 グループID:\n{group_id}"
         reply(event.reply_token, msg)
         return
 
@@ -91,16 +80,20 @@ def handle_message(event):
         reply(event.reply_token, "入力をキャンセルしました。最初からやり直してください。")
         return
 
-    if user_id not in user_sessions:
-        if text == "あ":
-            user_sessions[user_id] = {"step": "status"}
-            send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
+    if user_id not in user_sessions or user_sessions[user_id].get("step") is None:
+        if text in ["あ", "テスト"]:
+            user_sessions[user_id] = {"step": "name", "test_mode": text == "テスト"}
+            reply(event.reply_token, "👤 お名前を入力してください（1度だけ聞きます）")
         return
 
     session = user_sessions[user_id]
     step = session.get("step")
 
-    if step == "status":
+    if step == "name":
+        session["name"] = text
+        session["step"] = "status"
+        send_quick_reply(event.reply_token, f"{text}さん、こんにちは！", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
+    elif step == "status":
         session["status"] = text
         session["step"] = "company"
         reply(event.reply_token, "② 会社名を入力してください（キャンセル可）")
@@ -144,22 +137,28 @@ def handle_message(event):
     elif step == "memo":
         session["memo"] = "" if text == "スキップ" else text
 
-        row = find_next_available_row()
-        if row:
-            name = user_names.get(user_id, "")
-            sheet.update_cell(row, 2, format_status(session["status"]))
-            sheet.update_cell(row, 3, name)
-            sheet.update_cell(row, 6, session["company"])
-            sheet.update_cell(row, 7, session["branch"])
-            sheet.update_cell(row, 9, session["site"])
-            sheet.update_cell(row, 10, session["month"])
-            sheet.update_cell(row, 11, session["type"])
-            sheet.update_cell(row, 12, session["worktype"])
+        if session.get("test_mode"):
+            a_number = "テスト"
+        else:
+            row = find_next_available_row()
+            if row:
+                sheet.update_cell(row, 2, format_status(session["status"]))
+                sheet.update_cell(row, 3, session["name"])
+                sheet.update_cell(row, 6, session["company"])
+                sheet.update_cell(row, 7, session["branch"])
+                sheet.update_cell(row, 9, session["site"])
+                sheet.update_cell(row, 10, session["month"])
+                sheet.update_cell(row, 11, session["type"])
+                sheet.update_cell(row, 12, session["worktype"])
+                a_number = sheet.cell(row, 1).value or str(row - 1)
+            else:
+                reply(event.reply_token, "⚠ スプレッドシートの空きが見つかりませんでした。")
+                del user_sessions[user_id]
+                return
 
-            a_number = sheet.cell(row, 1).value or str(row - 1)
-            summary = f"""入力者：{name}さん
-登録完了しました！（案件番号：{a_number}）
+        summary = f"""登録完了しました！（案件番号：{a_number}）
 
+入力者：{session['name']}
 ① 案件進捗：{session['status']}
 ② 会社名：{session['company']}
 ③ 元請・紹介者名：{session['client']}
@@ -170,9 +169,7 @@ def handle_message(event):
 ⑧ 作業予定月：{session['month']}
 ⑨ 対応者：{session['type']}
 ⑩ その他：{session['memo']}"""
-            reply(event.reply_token, summary)
-        else:
-            reply(event.reply_token, "⚠ スプレッドシートの空きが見つかりませんでした。")
+        reply(event.reply_token, summary)
         del user_sessions[user_id]
 
 def send_quick_reply(token, text, options):
@@ -189,14 +186,7 @@ def reply(token, text):
     ))
 
 def format_status(status):
-    if status == "3:受注":
-        return "3:受注"
-    elif status == "4:作業完了":
-        return "4:作業完了"
-    elif status == "定期":
-        return "定期"
-    else:
-        return "新規追加"
+    return status if status in ["3:受注", "4:作業完了", "定期"] else "新規追加"
 
 if __name__ == "__main__":
     print(">>> Flask App Starting <<<")
