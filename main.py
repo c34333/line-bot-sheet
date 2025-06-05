@@ -70,7 +70,7 @@ def handle_message(event):
             "test_mode": text == "テスト",
             "inputter_page": 1
         }
-        send_quick_reply(event.reply_token, "👤 入力者を選択してください（1/2）", ["未定", "諸橋", "酒井", "大塚", "原", "次へ ➡"])
+        send_quick_reply(event.reply_token, "📋 担当者を選んでください（1/2）", ["未定", "諸橋", "酒井", "大塚", "原", "次へ ➡"])
         return
 
     if text == "あなたのIDは？":
@@ -97,7 +97,7 @@ def handle_message(event):
     if step == "inputter":
         if text == "次へ ➡":
             session["inputter_page"] = 2
-            send_quick_reply(event.reply_token, "👤 入力者を選択してください（2/2）", ["関野", "志賀", "加勢", "藤巻", "キャンセル"])
+            send_quick_reply(event.reply_token, "📋 担当者を選んでください（2/2）", ["関野", "志賀", "加勢", "藤巻", "キャンセル"])
             return
         session["inputter_name"] = text
         session["step"] = "status"
