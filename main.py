@@ -28,12 +28,12 @@ api_client = ApiClient(configuration)
 line_bot_api = MessagingApi(api_client)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# Google Sheets setup
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 credentials_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, scope)
 gc = gspread.authorize(credentials)
 sheet = gc.open('LINEログ').sheet1
+ref_sheet = gc.open('LINEログ').worksheet('参照値')
 
 user_sessions = {}
 silent_group_ids = ["C6736021a0854b9c9526fdea9cf5acfa1", "Cac0760acd664e7fdfa7a40975c340351"]
@@ -100,16 +100,43 @@ def handle_message(event):
             send_quick_reply(event.reply_token, "👤 入力者を選択してください（2/2）", ["関野", "志賀", "加勢", "藤巻", "キャンセル"])
             return
         session["inputter_name"] = text
-        session["step"] = "status"
-        send_quick_reply(event.reply_token, f"{text}さんですね。\n① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
-    elif step == "status":
-        session["status"] = text
-        session["step"] = "company"
-        reply(event.reply_token, "② 会社名を入力してください（キャンセル可）")
-    elif step == "company":
-        session["company"] = text
+        session["step"] = "company_head"
+        reply(event.reply_token, "② 会社名の頭文字（ひらがな1文字）を入力してください または「新規」")
+
+    elif step == "company_head":
+        if text == "新規":
+            session["step"] = "company_head_new"
+            reply(event.reply_token, "🆕 新規会社の頭文字（ひらがな）を入力してください")
+        else:
+            session["company_head"] = text
+            company_list = get_company_list_by_head(text)
+            if company_list:
+                session["step"] = "company_select"
+                send_quick_reply(event.reply_token, "会社を選択してください", company_list + ["新規"])
+            else:
+                reply(event.reply_token, "該当する会社が見つかりません。「新規」と入力して登録できます")
+
+    elif step == "company_select":
+        if text == "新規":
+            session["step"] = "company_head_new"
+            reply(event.reply_token, "🆕 新規会社の頭文字（ひらがな）を入力してください")
+        else:
+            session["company"] = text
+            session["step"] = "client"
+            reply(event.reply_token, "③ 元請・紹介者名を入力してください")
+
+    elif step == "company_head_new":
+        session["company_head_new"] = text
+        session["step"] = "company_name_new"
+        reply(event.reply_token, "🆕 登録したい会社名を入力してください")
+
+    elif step == "company_name_new":
+        new_company = text
+        ref_sheet.append_row([session["company_head_new"], new_company])
+        session["company"] = new_company
         session["step"] = "client"
-        reply(event.reply_token, "③ 元請・紹介者名を入力してください（キャンセル可）")
+        reply(event.reply_token, f"✅ 「{new_company}」を登録しました。\n③ 元請・紹介者名を入力してください")
+
     elif step == "client":
         session["client"] = text
         session["step"] = "site"
@@ -199,6 +226,10 @@ def reply(token, text):
 
 def format_status(status):
     return status if status in ["3:受注", "4:作業完了", "定期"] else "新規追加"
+
+def get_company_list_by_head(head):
+    rows = ref_sheet.get_all_values()
+    return [row[1] for row in rows if row[0] == head]
 
 if __name__ == "__main__":
     print(">>> Flask App Starting <<<")
