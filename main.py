@@ -100,6 +100,11 @@ def handle_message(event):
             send_quick_reply(event.reply_token, "👤 入力者を選択してください（2/2）", ["関野", "志賀", "加勢", "藤巻", "キャンセル"])
             return
         session["inputter_name"] = text
+        session["step"] = "status"
+        send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
+
+    elif step == "status":
+        session["status"] = text
         session["step"] = "company_head"
         reply(event.reply_token, "② 会社名の頭文字（ひらがな1文字）を入力してください または「新規」")
 
