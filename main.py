@@ -3,6 +3,7 @@ import json
 import gspread
 from flask import Flask, request, abort
 from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
 from linebot.v3.webhook import WebhookHandler
 from linebot.v3.messaging import (
@@ -67,10 +68,9 @@ def handle_message(event):
     if text in ["あ", "テスト"]:
         user_sessions[user_id] = {
             "step": "inputter",
-            "test_mode": text == "テスト",
-            "inputter_page": 1
+            "test_mode": text == "テスト"
         }
-        send_quick_reply(event.reply_token, "📋 担当者を選んでください（1/2）", ["未定", "諸橋", "酒井", "大塚", "原", "次へ ➡"])
+        send_quick_reply(event.reply_token, "📋 担当者を選んでください", ["未定", "諸橋", "酒井", "大塚", "原", "関野", "志賀", "加勢", "藤巻"])
         return
 
     if text == "あなたのIDは？":
@@ -95,10 +95,6 @@ def handle_message(event):
     step = session.get("step")
 
     if step == "inputter":
-        if text == "次へ ➡":
-            session["inputter_page"] = 2
-            send_quick_reply(event.reply_token, "📋 担当者を選んでください（2/2）", ["関野", "志賀", "加勢", "藤巻", "キャンセル"])
-            return
         session["inputter_name"] = text
         session["step"] = "status"
         send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
@@ -134,7 +130,7 @@ def handle_message(event):
             if 0 <= idx < len(company_list):
                 session["company"] = company_list[idx]
                 session["step"] = "client"
-                reply(event.reply_token, "③ 元請・紹介者名を入力してください")
+                reply(event.reply_token, "③ 元請担当を入力してください")
             else:
                 reply(event.reply_token, "⚠ 番号が範囲外です。もう一度選んでください")
         except:
@@ -150,44 +146,56 @@ def handle_message(event):
         ref_sheet.append_row([session["company_head_new"], new_company])
         session["company"] = new_company
         session["step"] = "client"
-        reply(event.reply_token, f"✅ 「{new_company}」を登録しました。\n③ 元請・紹介者名を入力してください")
+        reply(event.reply_token, f"✅ 「{new_company}」を登録しました。\n③ 元請担当を入力してください")
 
     elif step == "client":
         session["client"] = text
         session["step"] = "site"
-        reply(event.reply_token, "④ 現場名を入力してください（キャンセル可）")
+        send_quick_reply(event.reply_token, "④ 現場名を入力してください（スキップ と入力で次へ進みます）", ["スキップ"])
+
     elif step == "site":
-        session["site"] = text
+        session["site"] = text if text != "スキップ" else ""
         session["step"] = "branch"
         send_quick_reply(event.reply_token, "⑤ 拠点名を選んでください", ["本社", "関東", "前橋", "キャンセル"])
+
     elif step == "branch":
         session["branch"] = f":{text}"
         session["step"] = "content"
-        send_quick_reply(event.reply_token, "⑥ 依頼内容・ポイントを入力してください（スキップ可）", ["スキップ", "キャンセル"])
+        send_quick_reply(event.reply_token, "⑥ 依頼内容・ポイントを入力してください（スキップ と入力で次へ進みます）", ["スキップ", "キャンセル"])
+
     elif step == "content":
         session["content"] = "" if text == "スキップ" else text
         session["step"] = "worktype"
         send_quick_reply(event.reply_token, "⑦ 施工内容を選んでください", ["洗浄", "清掃", "調査", "工事", "点検", "塗装", "修理", "キャンセル"])
+
     elif step == "worktype":
         session["worktype"] = text
         session["step"] = "month"
         session["month_page"] = 1
-        send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（1/2）", ["未定", "1月", "2月", "3月", "4月", "5月", "6月", "次へ ➡"])
+        now = datetime.now()
+        this_month = now.month
+        month_labels = ["未定"] + [f"{(this_month + i - 1) % 12 + 1}月" for i in range(12)]
+        page1 = month_labels[:8]
+        page2 = month_labels[8:]
+        session["month_page1"] = page1
+        session["month_page2"] = page2
+        send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（1/2）", page1 + ["次へ ➡"])
+
     elif step == "month":
         if text == "次へ ➡":
-            session["month_page"] = 2
-            send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（2/2）", ["7月", "8月", "9月", "10月", "11月", "12月", "キャンセル"])
+            send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（2/2）", session["month_page2"] + ["キャンセル"])
             return
         session["month"] = f"2025年{text}" if text != "未定" else "未定"
         session["step"] = "type"
         send_quick_reply(event.reply_token, "⑨ 対応者を選んでください", ["自社", "外注", "未定", "キャンセル"])
+
     elif step == "type":
         session["type"] = text
         session["step"] = "memo"
-        send_quick_reply(event.reply_token, "⑩ その他入力項目があれば入力してください（スキップ可）", ["スキップ", "キャンセル"])
+        send_quick_reply(event.reply_token, "⑩ その他入力項目があれば入力してください（スキップ と入力で次へ進みます）", ["スキップ", "キャンセル"])
+
     elif step == "memo":
         session["memo"] = "" if text == "スキップ" else text
-
         profile = line_bot_api.get_profile(user_id)
         display_name = profile.display_name
 
@@ -214,7 +222,7 @@ def handle_message(event):
                   f"入力者：{session['inputter_name']}\n" \
                   f"① 案件進捗：{session['status']}\n" \
                   f"② 会社名：{session['company']}\n" \
-                  f"③ 元請・紹介者名：{session['client']}\n" \
+                  f"③ 元請担当：{session['client']}\n" \
                   f"④ 現場名：{session['site']}\n" \
                   f"⑤ 拠点名：{session['branch']}\n" \
                   f"⑥ 依頼内容・ポイント：{session['content']}\n" \
