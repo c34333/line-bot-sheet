@@ -56,18 +56,20 @@ def callback():
         abort(400)
     return 'OK'
 
-
+@handler.add(MessageEvent)
+def handle_message(event):
+    user_id = event.source.user_id
+    text = event.message.text.strip()
+    group_id = getattr(event.source, 'group_id', None)
+
     if text in ["リセット", "最初から"]:
         if user_id in user_sessions:
             del user_sessions[user_id]
         reply(event.reply_token, "リセットしました。もう一度『あ』または『テスト』と送ってください。")
         return
+
     if not isinstance(event.message, TextMessageContent):
         return
-
-    user_id = event.source.user_id
-    text = event.message.text.strip()
-    group_id = getattr(event.source, 'group_id', None)
 
     if text in ["あ", "テスト"]:
         user_sessions[user_id] = {
