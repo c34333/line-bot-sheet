@@ -116,19 +116,29 @@ def handle_message(event):
             session["company_head"] = text
             company_list = get_company_list_by_head(text)
             if company_list:
-                session["step"] = "company_select"
-                send_quick_reply(event.reply_token, "会社を選択してください", company_list + ["新規"])
+                session["company_candidates"] = company_list
+                numbered_list = "\n".join([f"{i+1}. {name}" for i, name in enumerate(company_list)])
+                session["step"] = "company_number_select"
+                reply(event.reply_token, f"該当する会社を番号で選んでください：\n{numbered_list}\n0. ← 頭文字からやり直す\n→ 例：3 と入力")
             else:
                 reply(event.reply_token, "該当する会社が見つかりません。「新規」と入力して登録できます")
 
-    elif step == "company_select":
-        if text == "新規":
-            session["step"] = "company_head_new"
-            reply(event.reply_token, "🆕 新規会社の頭文字（ひらがな）を入力してください")
-        else:
-            session["company"] = text
-            session["step"] = "client"
-            reply(event.reply_token, "③ 元請・紹介者名を入力してください")
+    elif step == "company_number_select":
+        if text == "0":
+            session["step"] = "company_head"
+            reply(event.reply_token, "② 会社名の頭文字（ひらがな1文字）を入力してください または「新規」")
+            return
+        try:
+            idx = int(text) - 1
+            company_list = session.get("company_candidates", [])
+            if 0 <= idx < len(company_list):
+                session["company"] = company_list[idx]
+                session["step"] = "client"
+                reply(event.reply_token, "③ 元請・紹介者名を入力してください")
+            else:
+                reply(event.reply_token, "⚠ 番号が範囲外です。もう一度選んでください")
+        except:
+            reply(event.reply_token, "⚠ 数字で入力してください。例：1")
 
     elif step == "company_head_new":
         session["company_head_new"] = text
@@ -217,7 +227,7 @@ def handle_message(event):
         del user_sessions[user_id]
 
 def send_quick_reply(token, text, options):
-    items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options]
+    items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options[:13]]
     line_bot_api.reply_message(ReplyMessageRequest(
         reply_token=token,
         messages=[TextMessage(text=text, quick_reply=QuickReply(items=items))]
