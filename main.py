@@ -36,6 +36,7 @@ gc = gspread.authorize(credentials)
 sheet = gc.open('LINEログ').sheet1
 
 user_sessions = {}
+silent_group_ids = ["C6736021a0854b9c9526fdea9cf5acfa1", "Cac0760acd664e7fdfa7a40975c340351"]
 
 def find_next_available_row():
     col_b = sheet.col_values(2)
@@ -61,8 +62,8 @@ def handle_message(event):
 
     user_id = event.source.user_id
     text = event.message.text.strip()
+    group_id = getattr(event.source, 'group_id', None)
 
-    # 強制リセットトリガー
     if text in ["あ", "テスト"]:
         user_sessions[user_id] = {
             "step": "inputter",
@@ -72,25 +73,22 @@ def handle_message(event):
         send_quick_reply(event.reply_token, "👤 入力者を選択してください（1/2）", ["未定", "諸橋", "酒井", "大塚", "原", "次へ ➡"])
         return
 
-    # ID確認
     if text == "あなたのIDは？":
         msg = f"🆔 あなたのユーザーID:\n{user_id}"
-        group_id = getattr(event.source, 'group_id', None)
         if group_id:
             msg += f"\n👥 グループID:\n{group_id}"
         reply(event.reply_token, msg)
         return
 
-    # キャンセル処理
     if text == "キャンセル":
         if user_id in user_sessions:
             del user_sessions[user_id]
         reply(event.reply_token, "入力をキャンセルしました。最初からやり直してください。")
         return
 
-    # セッションがない場合（例外）
     if user_id not in user_sessions:
-        reply(event.reply_token, "「あ」または「テスト」と入力して最初から始めてください。")
+        if event.source.type == "group" and group_id in silent_group_ids:
+            return
         return
 
     session = user_sessions[user_id]
