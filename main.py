@@ -29,8 +29,10 @@ scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/au
 credentials_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, scope)
 gc = gspread.authorize(credentials)
-sheet = gc.open('営業月別売上表2025').worksheet('基本入力')
-ref_sheet = gc.open('営業月別売上表2025').worksheet('参照値')
+
+# ✅ URLで指定（open_by_url）に変更
+sheet = gc.open_by_url('https://docs.google.com/spreadsheets/d/1aVg4VIJRkEyyVs7FLik0smlhujtU-0DW/edit#gid=1558050264').worksheet('基本入力')
+ref_sheet = gc.open_by_url('https://docs.google.com/spreadsheets/d/1aVg4VIJRkEyyVs7FLik0smlhujtU-0DW/edit#gid=1558050264').worksheet('参照値')
 
 user_sessions = {}
 
@@ -124,4 +126,4 @@ def handle_message(event):
         ref_sheet.append_row([session["company_head_new"], new_company], table_range="P:Q")
         reply(event.reply_token, "④ 元請担当を入力してください（スキップ可）")
 
-# （以下、前回のmemoステップ以降の転記処理部分に続く）
+# （以下、client～memo→転記＆通知ステップへと続きます）
