@@ -30,9 +30,8 @@ credentials_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, scope)
 gc = gspread.authorize(credentials)
 
-# ✅ URLで指定（open_by_url）に変更
-sheet = gc.open_by_url('https://docs.google.com/spreadsheets/d/1aVg4VIJRkEyyVs7FLik0smlhujtU-0DW/edit#gid=1558050264').worksheet('基本入力')
-ref_sheet = gc.open_by_url('https://docs.google.com/spreadsheets/d/1aVg4VIJRkEyyVs7FLik0smlhujtU-0DW/edit#gid=1558050264').worksheet('参照値')
+sheet = gc.open_by_key('1aVg4VIJRkEyyVs7FLik0smlhujtU-0DW').worksheet('基本入力')
+ref_sheet = gc.open_by_key('1aVg4VIJRkEyyVs7FLik0smlhujtU-0DW').worksheet('参照値')
 
 user_sessions = {}
 
@@ -112,7 +111,7 @@ def handle_message(event):
             return
         session["company"] = text
         session["step"] = "client"
-        reply(event.reply_token, "④ 元請担当を入力してください（スキップ可）")
+        send_quick_reply(event.reply_token, "④ 元請担当を入力してください（スキップ可）", ["スキップ"])
 
     elif step == "company_head_new":
         session["company_head_new"] = text
@@ -124,6 +123,91 @@ def handle_message(event):
         session["company"] = new_company
         session["step"] = "client"
         ref_sheet.append_row([session["company_head_new"], new_company], table_range="P:Q")
-        reply(event.reply_token, "④ 元請担当を入力してください（スキップ可）")
+        send_quick_reply(event.reply_token, "④ 元請担当を入力してください（スキップ可）", ["スキップ"])
 
-# （以下、client～memo→転記＆通知ステップへと続きます）
+    elif step == "client":
+        session["client"] = "" if text == "スキップ" else text
+        session["step"] = "site"
+        send_quick_reply(event.reply_token, "⑤ 現場名を入力してください（スキップ可）", ["スキップ"])
+
+    elif step == "site":
+        session["site"] = "" if text == "スキップ" else text
+        session["step"] = "branch"
+        send_quick_reply(event.reply_token, "⑥ 拠点名を選んでください", ["本社", "関東", "前橋", "その他"])
+
+    elif step == "branch":
+        session["branch"] = text
+        session["step"] = "content"
+        send_quick_reply(event.reply_token, "⑦ 依頼内容を入力してください（スキップ可）", ["スキップ"])
+
+    elif step == "content":
+        session["content"] = "" if text == "スキップ" else text
+        session["step"] = "worktype"
+        send_quick_reply(event.reply_token, "⑧ 施工内容を選んでください", ["洗浄", "清掃", "調査", "工事", "点検", "塗装", "修理"])
+
+    elif step == "worktype":
+        session["worktype"] = text
+        session["step"] = "month"
+        now = datetime.now()
+        months = ["未定"] + [f"{(now.month + i - 1) % 12 + 1}月" for i in range(6)]
+        send_quick_reply(event.reply_token, "⑨ 作業月を選んでください", months)
+
+    elif step == "month":
+        session["month"] = text
+        session["step"] = "memo"
+        send_quick_reply(event.reply_token, "⑩ その他特記事項があれば入力してください（スキップ可）", ["スキップ"])
+
+    elif step == "memo":
+        session["memo"] = "" if text == "スキップ" else text
+
+        if session.get("test_mode"):
+            reply(event.reply_token, "テストモードのためスプレッドシートには転記されません")
+        else:
+            row = find_next_available_row()
+            if row:
+                sheet.update_cell(row, 2, session["status"])
+                sheet.update_cell(row, 3, session["inputter_name"])
+                sheet.update_cell(row, 6, session["company"])
+                sheet.update_cell(row, 7, session["branch"])
+                sheet.update_cell(row, 8, session["client"])
+                sheet.update_cell(row, 9, session["site"])
+                sheet.update_cell(row, 10, session["month"])
+                sheet.update_cell(row, 11, session["inputter_name"])
+                sheet.update_cell(row, 12, session["worktype"])
+                sheet.update_cell(row, 13, session["content"])
+                sheet.update_cell(row, 14, session["memo"])
+
+            summary = f"{session['inputter_name']}さんが案件を登録しました！\n\n" \
+                      f"① 入力者：{session['inputter_name']}\n" \
+                      f"② 案件進捗：{session['status']}\n" \
+                      f"③ 会社名：{session['company']}\n" \
+                      f"④ 元請担当：{session['client']}\n" \
+                      f"⑤ 現場名：{session['site']}\n" \
+                      f"⑥ 拠点名：{session['branch']}\n" \
+                      f"⑦ 依頼内容：{session['content']}\n" \
+                      f"⑧ 施工内容：{session['worktype']}\n" \
+                      f"⑨ 作業月：{session['month']}\n" \
+                      f"⑩ その他：{session['memo']}"
+
+            line_bot_api.push_message(PushMessageRequest(to=report_group_id, messages=[TextMessage(text=summary)]))
+            reply(event.reply_token, "✅ 案件を登録しました！")
+
+        del user_sessions[user_id]
+
+
+def get_company_list_by_head(head):
+    values = ref_sheet.get_all_values()
+    return [row[1] for row in values if row[0] == head and len(row) > 1]
+
+def send_quick_reply(token, text, options):
+    items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options]
+    line_bot_api.reply_message(ReplyMessageRequest(
+        reply_token=token,
+        messages=[TextMessage(text=text, quick_reply=QuickReply(items=items))]
+    ))
+
+def reply(token, text):
+    line_bot_api.reply_message(ReplyMessageRequest(
+        reply_token=token,
+        messages=[TextMessage(text=text)]
+    ))
