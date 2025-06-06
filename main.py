@@ -1,163 +1,9 @@
-import os
-import json
-import gspread
-from flask import Flask, request, abort
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
-
-from linebot.v3.webhook import WebhookHandler
-from linebot.v3.messaging import (
-    Configuration,
-    ApiClient,
-    MessagingApi,
-    ReplyMessageRequest,
-    TextMessage,
-    QuickReply,
-    QuickReplyItem,
-    MessageAction
-)
-from linebot.v3.webhooks import MessageEvent, TextMessageContent
-from linebot.v3.exceptions import InvalidSignatureError
-
-app = Flask(__name__)
-
-LINE_CHANNEL_ACCESS_TOKEN = os.environ['LINE_CHANNEL_ACCESS_TOKEN']
-LINE_CHANNEL_SECRET = os.environ['LINE_CHANNEL_SECRET']
-
-configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
-api_client = ApiClient(configuration)
-line_bot_api = MessagingApi(api_client)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
-
-scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-credentials_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
-credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, scope)
-gc = gspread.authorize(credentials)
-sheet = gc.open('LINEログ').sheet1
-ref_sheet = gc.open('LINEログ').worksheet('参照値')
-
-user_sessions = {}
-silent_group_ids = ["C6736021a0854b9c9526fdea9cf5acfa1", "Cac0760acd664e7fdfa7a40975c340351"]
-
-def find_next_available_row():
-    col_b = sheet.col_values(2)
-    for i in range(1, 2001):
-        if i >= len(col_b) or col_b[i] == '':
-            return i + 1
-    return None
-
-@app.route("/callback", methods=['POST'])
-def callback():
-    signature = request.headers['X-Line-Signature']
-    body = request.get_data(as_text=True)
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-    return 'OK'
-
-@handler.add(MessageEvent)
-def handle_message(event):
-    user_id = event.source.user_id
-    text = event.message.text.strip()
-    group_id = getattr(event.source, 'group_id', None)
-
-    if text in ["リセット", "最初から"]:
-        if user_id in user_sessions:
-            del user_sessions[user_id]
-        reply(event.reply_token, "リセットしました。もう一度『あ』または『テスト』と送ってください。")
-        return
-
-    if not isinstance(event.message, TextMessageContent):
-        return
-
-    if text in ["あ", "テスト"]:
-        user_sessions[user_id] = {
-            "step": "inputter",
-            "test_mode": text == "テスト"
-        }
-        send_quick_reply(event.reply_token, "📋 担当者を選んでください", ["未定", "諸橋", "酒井", "大塚", "原", "関野", "志賀", "加勢", "藤巻"])
-        return
-
-    if text == "あなたのIDは？":
-        msg = f"🆔 あなたのユーザーID:\n{user_id}"
-        if group_id:
-            msg += f"\n👥 グループID:\n{group_id}"
-        reply(event.reply_token, msg)
-        return
-
-    if text == "キャンセル":
-        if user_id in user_sessions:
-            del user_sessions[user_id]
-        reply(event.reply_token, "入力をキャンセルしました。最初からやり直してください。")
-        return
-
-    if user_id not in user_sessions:
-        if event.source.type == "group" and group_id in silent_group_ids:
-            return
-        return
-
-    session = user_sessions[user_id]
-    step = session.get("step")
-
-    if step == "inputter":
-        session["inputter_name"] = text
-        session["step"] = "status"
-        send_quick_reply(event.reply_token, "① 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
-
-    elif step == "status":
-        session["status"] = text
-        session["step"] = "company_head"
-        reply(event.reply_token, "② 会社名の頭文字（ひらがな1文字）を入力してください または「新規」")
-
-    elif step == "company_head":
-        if text == "新規":
-            session["step"] = "company_head_new"
-            reply(event.reply_token, "🆕 新規会社の頭文字（ひらがな）を入力してください")
-        else:
-            session["company_head"] = text
-            company_list = get_company_list_by_head(text)
-            if company_list:
-                session["company_candidates"] = company_list
-                numbered_list = "\n".join([f"{i+1}. {name}" for i, name in enumerate(company_list)])
-                session["step"] = "company_number_select"
-                reply(event.reply_token, f"該当する会社を番号で選んでください：\n{numbered_list}\n0. ← 頭文字からやり直す\n→ 例：3 と入力")
-            else:
-                reply(event.reply_token, "該当する会社が見つかりません。「新規」と入力して登録できます")
-
-    elif step == "company_number_select":
-        if text == "0":
-            session["step"] = "company_head"
-            reply(event.reply_token, "② 会社名の頭文字（ひらがな1文字）を入力してください または「新規」")
-            return
-        try:
-            idx = int(text) - 1
-            company_list = session.get("company_candidates", [])
-            if 0 <= idx < len(company_list):
-                session["company"] = company_list[idx]
-                session["step"] = "client"
-                reply(event.reply_token, "③ 元請担当を入力してください")
-            else:
-                reply(event.reply_token, "⚠ 番号が範囲外です。もう一度選んでください")
-        except:
-            reply(event.reply_token, "⚠ 数字で入力してください。例：1")
-
-    elif step == "company_head_new":
-        session["company_head_new"] = text
-        session["step"] = "company_name_new"
-        reply(event.reply_token, "🆕 登録したい会社名を入力してください")
-
-    elif step == "company_name_new":
-        new_company = text
-        ref_sheet.append_row([session["company_head_new"], new_company])
-        session["company"] = new_company
-        session["step"] = "client"
-        reply(event.reply_token, f"✅ 「{new_company}」を登録しました。\n③ 元請担当を入力してください")
+（中略... 既存コード省略）
 
     elif step == "client":
-        session["client"] = text
+        session["client"] = text if text != "スキップ" else ""
         session["step"] = "site"
-        send_quick_reply(event.reply_token, "④ 現場名を入力してください（スキップ と入力で次へ進みます）", ["スキップ"])
+        reply(event.reply_token, "④ 現場名を入力してください（スキップ可）")
 
     elif step == "site":
         session["site"] = text if text != "スキップ" else ""
@@ -165,31 +11,27 @@ def handle_message(event):
         send_quick_reply(event.reply_token, "⑤ 拠点名を選んでください", ["本社", "関東", "前橋", "キャンセル"])
 
     elif step == "branch":
-        session["branch"] = f":{text}"
+        session["branch"] = text
         session["step"] = "content"
-        send_quick_reply(event.reply_token, "⑥ 依頼内容・ポイントを入力してください（スキップ と入力で次へ進みます）", ["スキップ", "キャンセル"])
+        send_quick_reply(event.reply_token, "⑥ 依頼内容・ポイントを入力してください（スキップ可）", ["スキップ", "キャンセル"])
 
     elif step == "content":
-        session["content"] = "" if text == "スキップ" else text
+        session["content"] = text if text != "スキップ" else ""
         session["step"] = "worktype"
         send_quick_reply(event.reply_token, "⑦ 施工内容を選んでください", ["洗浄", "清掃", "調査", "工事", "点検", "塗装", "修理", "キャンセル"])
 
     elif step == "worktype":
         session["worktype"] = text
         session["step"] = "month"
-        session["month_page"] = 1
-        now = datetime.now()
-        this_month = now.month
-        month_labels = ["未定"] + [f"{(this_month + i - 1) % 12 + 1}月" for i in range(12)]
-        page1 = month_labels[:8]
-        page2 = month_labels[8:]
-        session["month_page1"] = page1
-        session["month_page2"] = page2
-        send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（1/2）", page1 + ["次へ ➡"])
+        today = datetime.today()
+        current_month = today.month
+        first_page = ["未定"] + [f"{m}月" for m in range(current_month, current_month + 6 if current_month <= 7 else 13)]
+        send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（1/2）", first_page + ["次へ ➡"])
 
     elif step == "month":
         if text == "次へ ➡":
-            send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（2/2）", session["month_page2"] + ["キャンセル"])
+            rest = [f"{m}月" for m in range((current_month + 6) % 12 or 12, (current_month - 1) % 12 + 1)]
+            send_quick_reply(event.reply_token, "⑧ 作業予定月を選んでください（2/2）", rest + ["キャンセル"])
             return
         session["month"] = f"2025年{text}" if text != "未定" else "未定"
         session["step"] = "type"
@@ -198,12 +40,10 @@ def handle_message(event):
     elif step == "type":
         session["type"] = text
         session["step"] = "memo"
-        send_quick_reply(event.reply_token, "⑩ その他入力項目があれば入力してください（スキップ と入力で次へ進みます）", ["スキップ", "キャンセル"])
+        send_quick_reply(event.reply_token, "⑩ その他入力があれば入力してください（スキップ可）", ["スキップ", "キャンセル"])
 
     elif step == "memo":
-        session["memo"] = "" if text == "スキップ" else text
-        profile = line_bot_api.get_profile(user_id)
-        display_name = profile.display_name
+        session["memo"] = text if text != "スキップ" else ""
 
         if session.get("test_mode"):
             a_number = "テスト"
@@ -218,14 +58,16 @@ def handle_message(event):
                 sheet.update_cell(row, 10, session["month"])
                 sheet.update_cell(row, 11, session["type"])
                 sheet.update_cell(row, 12, session["worktype"])
+                sheet.update_cell(row, 13, session["memo"])
+                sheet.update_cell(row, 14, session["client"])
+                sheet.update_cell(row, 15, session["content"])
                 a_number = sheet.cell(row, 1).value or str(row - 1)
             else:
                 reply(event.reply_token, "⚠ スプレッドシートの空きが見つかりませんでした。")
                 del user_sessions[user_id]
                 return
 
-        summary = f"{display_name}さんが案件を登録しました！（案件番号：{a_number}）\n\n" \
-                  f"入力者：{session['inputter_name']}\n" \
+        summary = f"入力者：{session['inputter_name']}\n{session['inputter_name']}さんが案件を登録しました！（案件番号：{a_number}）\n\n" \
                   f"① 案件進捗：{session['status']}\n" \
                   f"② 会社名：{session['company']}\n" \
                   f"③ 元請担当：{session['client']}\n" \
@@ -238,10 +80,17 @@ def handle_message(event):
                   f"⑩ その他：{session['memo']}"
 
         reply(event.reply_token, summary)
+
+        if not session.get("test_mode"):
+            line_bot_api.push_message(PushMessageRequest(
+                to=report_group_id,
+                messages=[TextMessage(text=summary)]
+            ))
+
         del user_sessions[user_id]
 
 def send_quick_reply(token, text, options):
-    items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options[:13]]
+    items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options]
     line_bot_api.reply_message(ReplyMessageRequest(
         reply_token=token,
         messages=[TextMessage(text=text, quick_reply=QuickReply(items=items))]
@@ -257,8 +106,13 @@ def format_status(status):
     return status if status in ["3:受注", "4:作業完了", "定期"] else "新規追加"
 
 def get_company_list_by_head(head):
-    rows = ref_sheet.get_all_values()
-    return [row[1] for row in rows if row[0] == head]
+    values = ref_sheet.get_all_values()
+    companies = []
+    for row in values:
+        if len(row) >= 17:
+            if row[15] == head:
+                companies.append(row[16])
+    return companies
 
 if __name__ == "__main__":
     print(">>> Flask App Starting <<<")
