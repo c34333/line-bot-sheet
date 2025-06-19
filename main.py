@@ -79,27 +79,32 @@ def handle_message(event):
     if command == "ん":
         user_sessions[user_id] = {"step": "inputter"}
         send_quick_reply(event.reply_token, "① 入力者を選んでください", ["未定", "諸橋", "酒井", "大塚", "原", "関野", "志賀", "加勢", "藤巻"])
+        return
     elif command == "テスト":
         user_sessions[user_id] = {"step": "inputter", "test_mode": True, "sender_name": get_user_display_name(user_id)}
         send_quick_reply(event.reply_token, "① 入力者を選んでください", ["未定", "諸橋", "酒井", "大塚", "原", "関野", "志賀", "加勢", "藤巻"])
-    else:
-        session = user_sessions.get(user_id)
-        if not session:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="「ん」または「テスト」と入力して最初から始めてください。")
-            )
-            return
+        return
 
-        # 各種ステップ処理（略、元の詳細ステップをここに展開可能）
-        # 例： if session["step"] == "inputter": ...
+    session = user_sessions.get(user_id)
+    if not session:
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="「ん」または「テスト」と入力して最初から始めてください。")
+        )
+        return
 
-        # 最終ステップまで完了したら：
-        # 1. スプレッドシートに転記
-        # 2. 通常なら report_group_id に通知 / テストなら自分に通知
+    # 入力者の後のステップへ
+    if session["step"] == "inputter":
+        session["inputter"] = text
+        session["step"] = "company_initial"
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="② 会社名の頭文字（ひらがな1文字）を入力してください。\n新規の場合は「新規」と入力してください。")
+        )
+        return
 
-        # 最後にセッション削除
-        # del user_sessions[user_id]
+    # 以下、続く質問ロジックをここに追加していきます
+
 
 def send_quick_reply(token, text, options):
     quick_reply = QuickReply(items=[
