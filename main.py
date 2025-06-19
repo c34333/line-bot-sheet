@@ -48,7 +48,6 @@ def handle_message(event):
     group_id = getattr(event.source, 'group_id', None)
     text = event.message.text.strip()
 
-    # コマンドエイリアス
     command_aliases = {
         "案件追加": "ん",
         "新規案件": "ん",
@@ -57,7 +56,6 @@ def handle_message(event):
     }
     command = command_aliases.get(text, text)
 
-    # リセット対応（リセットのみ、セッション削除）
     if command in ["リセット", "キャンセル"]:
         if user_id in user_sessions:
             del user_sessions[user_id]
@@ -72,7 +70,6 @@ def handle_message(event):
             )
         return
 
-    # サイレントグループ制御
     if group_id in silent_group_ids and user_id not in user_sessions and command not in ["ん", "テスト"]:
         return
 
@@ -93,7 +90,6 @@ def handle_message(event):
         )
         return
 
-    # 入力者の後のステップへ
     if session["step"] == "inputter":
         session["inputter"] = text
         session["step"] = "company_initial"
@@ -103,8 +99,60 @@ def handle_message(event):
         )
         return
 
-    # 以下、続く質問ロジックをここに追加していきます
+    if session["step"] == "company_initial":
+        session["company_initial"] = text
+        session["step"] = "site_name"
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="③ 現場名を入力してください。")
+        )
+        return
 
+    if session["step"] == "site_name":
+        session["site_name"] = text
+        session["step"] = "work_month"
+        now = datetime.now()
+        month_options = ["未定"] + [f"{(now.month + i - 1) % 12 + 1}月" for i in range(6)]
+        send_quick_reply(event.reply_token, "④ 作業月を選んでください。", month_options)
+        return
+
+    if session["step"] == "work_month":
+        session["work_month"] = text
+        session["step"] = "contractor"
+        send_quick_reply(event.reply_token, "⑤ 対応者を選んでください。", ["自社", "外注", "未定"])
+        return
+
+    if session["step"] == "contractor":
+        session["contractor"] = text
+        session["step"] = "work_details"
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="⑥ 施工内容を入力してください。スキップする場合は「スキップ」と入力してください。")
+        )
+        return
+
+    if session["step"] == "work_details":
+        session["work_details"] = text if text != "スキップ" else ""
+        session["step"] = "final"
+        finalize_and_record(event, session)
+        del user_sessions[user_id]
+        return
+
+def finalize_and_record(event, session):
+    values = sheet.get_all_values()
+    next_row = next(i+1 for i, row in enumerate(values) if not any(cell.strip() for cell in row))
+    sheet.update_cell(next_row, 3, session.get("inputter", ""))  # C列
+    sheet.update_cell(next_row, 6, "会社名仮")                  # F列（今後の処理で会社名追加）
+    sheet.update_cell(next_row, 9, session.get("site_name", ""))  # I列
+    sheet.update_cell(next_row, 10, session.get("work_month", ""))# J列
+    sheet.update_cell(next_row, 11, session.get("contractor", ""))# K列
+    sheet.update_cell(next_row, 13, session.get("work_details", ""))# M列
+
+    # 通知
+    report_to = event.source.user_id if session.get("test_mode") else report_group_id
+    summary = f"{session.get('sender_name', session.get('inputter', 'ユーザー'))}さんが案件を登録しました。\n"
+    summary += f"入力者：{session.get('inputter', '')}\n現場名：{session.get('site_name', '')}\n作業月：{session.get('work_month', '')}\n対応者：{session.get('contractor', '')}"
+    line_bot_api.push_message(report_to, TextSendMessage(text=summary))
 
 def send_quick_reply(token, text, options):
     quick_reply = QuickReply(items=[
