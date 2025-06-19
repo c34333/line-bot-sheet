@@ -180,7 +180,7 @@ def handle_message(event):
 
 def get_company_list_by_head(head):
     values = ref_sheet.get_all_values()
-    return [row[1] for row in values if len(row) >= 2 and row[0] == head]
+    return [row[16] for row in values if len(row) > 16 and row[15] == head]
 
 def get_user_display_name(user_id):
     try:
