@@ -37,9 +37,9 @@ user_sessions = {}
 
 def find_next_available_row():
     col_b = sheet.col_values(2)
-    for i in range(1, 2001):
-        if i >= len(col_b) or col_b[i] == '':
-            return i + 1
+    for i in range(2, 2001):
+        if i > len(col_b) or col_b[i - 1] == '':
+            return i
     return None
 
 @app.route("/callback", methods=['POST'])
@@ -69,14 +69,14 @@ def handle_message(event):
     if group_id in silent_group_ids and user_id not in user_sessions:
         return
 
-    if text in ["あ", "テスト"]:
+    if text in ["ん", "テスト"]:
         user_sessions[user_id] = {"step": "inputter", "test_mode": text == "テスト"}
         send_quick_reply(event.reply_token, "① 入力者を選んでください", ["未定", "諸橋", "酒井", "大塚", "原", "関野", "志賀", "加勢", "藤巻"])
         return
 
     session = user_sessions.get(user_id)
     if not session:
-        reply(event.reply_token, "「あ」または「テスト」と入力して最初から始めてください。")
+        reply(event.reply_token, "「ん」または「テスト」と入力して最初から始めてください。")
         return
 
     step = session.get("step")
@@ -84,10 +84,10 @@ def handle_message(event):
     if step == "inputter":
         session["inputter_name"] = text
         session["step"] = "status"
-        send_quick_reply(event.reply_token, "② 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
+        send_quick_reply(event.reply_token, "② 案件進捗を選んでください", ["新規追加", "3:受注", "4:請求待ち", "定期", "キャンセル"])
 
     elif step == "status":
-        session["status"] = text
+        session["status"] = "4:請求待ち" if text == "4:作業完了" else text
         session["step"] = "company_head"
         reply(event.reply_token, "③ 会社名の頭文字（ひらがな）を入力してください または『新規』")
 
@@ -126,12 +126,10 @@ def handle_message(event):
         send_quick_reply(event.reply_token, "④ 元請担当を入力してください（スキップ可）", ["スキップ"])
 
     elif step == "client":
-        session["client"] = "" if text == "スキップ" else text
         session["step"] = "site"
         send_quick_reply(event.reply_token, "⑤ 現場名を入力してください（スキップ可）", ["スキップ"])
 
     elif step == "site":
-        session["site"] = "" if text == "スキップ" else text
         session["step"] = "branch"
         send_quick_reply(event.reply_token, "⑥ 拠点名を選んでください", ["本社", "関東", "前橋", "その他"])
 
@@ -141,7 +139,6 @@ def handle_message(event):
         send_quick_reply(event.reply_token, "⑦ 依頼内容を入力してください（スキップ可）", ["スキップ"])
 
     elif step == "content":
-        session["content"] = "" if text == "スキップ" else text
         session["step"] = "worktype"
         send_quick_reply(event.reply_token, "⑧ 施工内容を選んでください", ["洗浄", "清掃", "調査", "工事", "点検", "塗装", "修理"])
 
@@ -169,22 +166,17 @@ def handle_message(event):
                 sheet.update_cell(row, 3, session["inputter_name"])
                 sheet.update_cell(row, 6, session["company"])
                 sheet.update_cell(row, 7, session["branch"])
-                sheet.update_cell(row, 8, session["client"])
-                sheet.update_cell(row, 9, session["site"])
                 sheet.update_cell(row, 10, session["month"])
-                sheet.update_cell(row, 11, session["inputter_name"])
                 sheet.update_cell(row, 12, session["worktype"])
-                sheet.update_cell(row, 13, session["content"])
-                sheet.update_cell(row, 14, session["memo"])
 
             summary = f"{session['inputter_name']}さんが案件を登録しました！\n\n" \
                       f"① 入力者：{session['inputter_name']}\n" \
                       f"② 案件進捗：{session['status']}\n" \
                       f"③ 会社名：{session['company']}\n" \
-                      f"④ 元請担当：{session['client']}\n" \
-                      f"⑤ 現場名：{session['site']}\n" \
-                      f"⑥ 拠点名：{session['branch']}\n" \
-                      f"⑦ 依頼内容：{session['content']}\n" \
+                      f"④ 元請担当：{session.get('client', '')}\n" \
+                      f"⑤ 現場名：{session.get('site', '')}\n" \
+                      f"⑥ 拠点名：{session.get('branch', '')}\n" \
+                      f"⑦ 依頼内容：{session.get('content', '')}\n" \
                       f"⑧ 施工内容：{session['worktype']}\n" \
                       f"⑨ 作業月：{session['month']}\n" \
                       f"⑩ その他：{session['memo']}"
@@ -210,6 +202,3 @@ def reply(token, text):
         reply_token=token,
         messages=[TextMessage(text=text)]
     ))
-# Flask アプリケーションをポート5000で起動（Render対応）
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
