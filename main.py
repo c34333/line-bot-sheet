@@ -210,3 +210,6 @@ def reply(token, text):
         reply_token=token,
         messages=[TextMessage(text=text)]
     ))
+# Flask アプリケーションをポート5000で起動（Render対応）
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
