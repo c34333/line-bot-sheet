@@ -119,10 +119,13 @@ def handle_message(event):
         reply(event.reply_token, "③-2 新規会社名を入力してください")
 
     elif step == "company_name_new":
-        new_company = text
-        session["company"] = new_company
+        session["company"] = text
+        session["step"] = "company_closing_day"
+        send_quick_reply(event.reply_token, "③-3 締め日を選んでください", ["不明", "末日", "20日", "5日", "10日", "15日", "25日", "その他"])
+
+    elif step == "company_closing_day":
         session["step"] = "site"
-        ref_sheet.append_row([session["company_head_new"], new_company], table_range="P:Q")
+        ref_sheet.append_row([session["company_head_new"], session["company"], text], table_range="P:R")
         reply(event.reply_token, "⑤ 現場名を入力してください（スキップ可）")
 
     elif step == "site":
