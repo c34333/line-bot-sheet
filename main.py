@@ -57,13 +57,19 @@ def handle_message(event):
     }
     command = command_aliases.get(text, text)
 
-    # リセット対応
+    # リセット対応（リセットのみ、セッション削除）
     if command in ["リセット", "キャンセル"]:
-        user_sessions.pop(user_id, None)
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text="リセットしました。再度コマンドを入力してください。")
-        )
+        if user_id in user_sessions:
+            del user_sessions[user_id]
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="リセットしました。再度コマンドを入力してください。")
+            )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="現在、進行中の登録はありません。再度コマンドを入力してください。")
+            )
         return
 
     # サイレントグループ制御
@@ -95,13 +101,11 @@ def handle_message(event):
         # 最後にセッション削除
         # del user_sessions[user_id]
 
-
 def send_quick_reply(token, text, options):
     quick_reply = QuickReply(items=[
         QuickReplyButton(action=MessageAction(label=opt, text=opt)) for opt in options
     ])
     line_bot_api.reply_message(token, TextSendMessage(text=text, quick_reply=quick_reply))
-
 
 def get_user_display_name(user_id):
     try:
