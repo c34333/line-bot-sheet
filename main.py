@@ -90,75 +90,75 @@ def handle_message(event):
         )
         return
 
-    if session["step"] == "inputter":
-        session["inputter"] = text
-        session["step"] = "company_initial"
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text="② 会社名の頭文字（ひらがな1文字）を入力してください。\n新規の場合は「新規」と入力してください。")
-        )
-        return
+    step = session["step"]
+    session[step] = text if text != "スキップ" else ""
 
-    if session["step"] == "company_initial":
-        session["company_initial"] = text
-        session["step"] = "site_name"
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text="③ 現場名を入力してください。")
-        )
-        return
+    step_order = [
+        "inputter",
+        "status",
+        "company",
+        "main_contact",
+        "site_name",
+        "branch",
+        "request_details",
+        "work_details",
+        "work_month",
+        "other_notes"
+    ]
 
-    if session["step"] == "site_name":
-        session["site_name"] = text
-        session["step"] = "work_month"
-        now = datetime.now()
-        month_options = ["未定"] + [f"{(now.month + i - 1) % 12 + 1}月" for i in range(6)]
-        send_quick_reply(event.reply_token, "④ 作業月を選んでください。", month_options)
-        return
-
-    if session["step"] == "work_month":
-        session["work_month"] = text
-        session["step"] = "contractor"
-        send_quick_reply(event.reply_token, "⑤ 対応者を選んでください。", ["自社", "外注", "未定"])
-        return
-
-    if session["step"] == "contractor":
-        session["contractor"] = text
-        session["step"] = "work_details"
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text="⑥ 施工内容を入力してください。スキップする場合は「スキップ」と入力してください。")
-        )
-        return
-
-    if session["step"] == "work_details":
-        session["work_details"] = text if text != "スキップ" else ""
-        session["step"] = "final"
+    next_step_index = step_order.index(step) + 1 if step in step_order else None
+    if next_step_index is not None and next_step_index < len(step_order):
+        session["step"] = step_order[next_step_index]
+        ask_question(event.reply_token, step_order[next_step_index])
+    else:
         finalize_and_record(event, session)
         del user_sessions[user_id]
-        return
+
+
+def ask_question(reply_token, step):
+    messages = {
+        "status": ("② 案件進捗を選んでください", ["新規追加", "受注", "請求待ち", "請求済み"]),
+        "company": ("③ 会社名を入力してください", None),
+        "main_contact": ("④ 元請担当を入力してください（スキップ可）", None),
+        "site_name": ("⑤ 現場名を入力してください", None),
+        "branch": ("⑥ 拠点名を入力してください（スキップ可）", None),
+        "request_details": ("⑦ 依頼内容を入力してください", None),
+        "work_details": ("⑧ 施工内容を入力してください", None),
+        "work_month": ("⑨ 作業月を選んでください", ["未定"] + [f"{(datetime.now().month + i - 1) % 12 + 1}月" for i in range(6)]),
+        "other_notes": ("⑩ その他を入力してください（スキップ可）", None),
+    }
+    text, options = messages[step]
+    if options:
+        send_quick_reply(reply_token, text, options)
+    else:
+        line_bot_api.reply_message(reply_token, TextSendMessage(text=text))
+
 
 def finalize_and_record(event, session):
     values = sheet.get_all_values()
     next_row = next(i+1 for i, row in enumerate(values) if not any(cell.strip() for cell in row))
-    sheet.update_cell(next_row, 3, session.get("inputter", ""))  # C列
-    sheet.update_cell(next_row, 6, "会社名仮")                  # F列（今後の処理で会社名追加）
-    sheet.update_cell(next_row, 9, session.get("site_name", ""))  # I列
-    sheet.update_cell(next_row, 10, session.get("work_month", ""))# J列
-    sheet.update_cell(next_row, 11, session.get("contractor", ""))# K列
-    sheet.update_cell(next_row, 13, session.get("work_details", ""))# M列
 
-    # 通知
+    sheet.update_cell(next_row, 2, session.get("status", ""))
+    sheet.update_cell(next_row, 3, session.get("inputter", ""))
+    sheet.update_cell(next_row, 6, session.get("company", ""))
+    sheet.update_cell(next_row, 7, session.get("branch", ""))
+    sheet.update_cell(next_row, 9, session.get("site_name", ""))
+    sheet.update_cell(next_row, 10, session.get("work_month", ""))
+    sheet.update_cell(next_row, 11, session.get("contractor", ""))
+    sheet.update_cell(next_row, 13, session.get("work_details", ""))
+
     report_to = event.source.user_id if session.get("test_mode") else report_group_id
     summary = f"{session.get('sender_name', session.get('inputter', 'ユーザー'))}さんが案件を登録しました。\n"
     summary += f"入力者：{session.get('inputter', '')}\n現場名：{session.get('site_name', '')}\n作業月：{session.get('work_month', '')}\n対応者：{session.get('contractor', '')}"
     line_bot_api.push_message(report_to, TextSendMessage(text=summary))
+
 
 def send_quick_reply(token, text, options):
     quick_reply = QuickReply(items=[
         QuickReplyButton(action=MessageAction(label=opt, text=opt)) for opt in options
     ])
     line_bot_api.reply_message(token, TextSendMessage(text=text, quick_reply=quick_reply))
+
 
 def get_user_display_name(user_id):
     try:
