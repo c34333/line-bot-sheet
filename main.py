@@ -74,7 +74,7 @@ def handle_message(event):
         return
 
     if command == "ん":
-        user_sessions[user_id] = {"step": "inputter"}
+        user_sessions[user_id] = {"step": "inputter", "sender_name": get_user_display_name(user_id)}
         send_quick_reply(event.reply_token, "① 入力者を選んでください", ["未定", "諸橋", "酒井", "大塚", "原", "関野", "志賀", "加勢", "藤巻"])
         return
     elif command == "テスト":
@@ -114,7 +114,6 @@ def handle_message(event):
         finalize_and_record(event, session)
         del user_sessions[user_id]
 
-
 def ask_question(reply_token, step):
     messages = {
         "status": ("② 案件進捗を選んでください", ["新規追加", "受注", "請求待ち", "請求済み"]),
@@ -132,7 +131,6 @@ def ask_question(reply_token, step):
         send_quick_reply(reply_token, text, options)
     else:
         line_bot_api.reply_message(reply_token, TextSendMessage(text=text))
-
 
 def finalize_and_record(event, session):
     values = sheet.get_all_values()
@@ -152,13 +150,11 @@ def finalize_and_record(event, session):
     summary += f"入力者：{session.get('inputter', '')}\n現場名：{session.get('site_name', '')}\n作業月：{session.get('work_month', '')}\n対応者：{session.get('contractor', '')}"
     line_bot_api.push_message(report_to, TextSendMessage(text=summary))
 
-
 def send_quick_reply(token, text, options):
     quick_reply = QuickReply(items=[
         QuickReplyButton(action=MessageAction(label=opt, text=opt)) for opt in options
     ])
     line_bot_api.reply_message(token, TextSendMessage(text=text, quick_reply=quick_reply))
-
 
 def get_user_display_name(user_id):
     try:
