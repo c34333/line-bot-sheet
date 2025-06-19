@@ -37,9 +37,9 @@ user_sessions = {}
 
 def find_next_available_row():
     col_b = sheet.col_values(2)
-    for i in range(2, 2001):
-        if i > len(col_b) or col_b[i - 1] == '':
-            return i
+    for i in range(1, 2001):
+        if i >= len(col_b) or col_b[i] == '':
+            return i + 1
     return None
 
 @app.route("/callback", methods=['POST'])
@@ -61,7 +61,7 @@ def handle_message(event):
     group_id = getattr(event.source, 'group_id', None)
     text = event.message.text.strip()
 
-    if text in ["リセット", "最初から"]:
+    if text in ["リセット", "最初から", "キャンセル"]:
         user_sessions[user_id] = {"step": "inputter"}
         send_quick_reply(event.reply_token, "① 入力者を選んでください", ["未定", "諸橋", "酒井", "大塚", "原", "関野", "志賀", "加勢", "藤巻"])
         return
@@ -70,7 +70,7 @@ def handle_message(event):
         return
 
     if text in ["ん", "テスト"]:
-        user_sessions[user_id] = {"step": "inputter", "test_mode": text == "テスト"}
+        user_sessions[user_id] = {"step": "inputter", "test_mode": text == "テスト", "sender_name": get_user_display_name(user_id)}
         send_quick_reply(event.reply_token, "① 入力者を選んでください", ["未定", "諸橋", "酒井", "大塚", "原", "関野", "志賀", "加勢", "藤巻"])
         return
 
@@ -84,7 +84,7 @@ def handle_message(event):
     if step == "inputter":
         session["inputter_name"] = text
         session["step"] = "status"
-        send_quick_reply(event.reply_token, "② 案件進捗を選んでください", ["新規追加", "3:受注", "4:請求待ち", "定期", "キャンセル"])
+        send_quick_reply(event.reply_token, "② 案件進捗を選んでください", ["新規追加", "3:受注", "4:作業完了", "定期", "キャンセル"])
 
     elif step == "status":
         session["status"] = "4:請求待ち" if text == "4:作業完了" else text
@@ -110,8 +110,8 @@ def handle_message(event):
             reply(event.reply_token, "③ 会社名の頭文字を再入力してください")
             return
         session["company"] = text
-        session["step"] = "client"
-        send_quick_reply(event.reply_token, "④ 元請担当を入力してください（スキップ可）", ["スキップ"])
+        session["step"] = "site"
+        reply(event.reply_token, "⑤ 現場名を入力してください（スキップ可）")
 
     elif step == "company_head_new":
         session["company_head_new"] = text
@@ -121,24 +121,17 @@ def handle_message(event):
     elif step == "company_name_new":
         new_company = text
         session["company"] = new_company
-        session["step"] = "client"
-        ref_sheet.append_row([session["company_head_new"], new_company], table_range="P:Q")
-        send_quick_reply(event.reply_token, "④ 元請担当を入力してください（スキップ可）", ["スキップ"])
-
-    elif step == "client":
         session["step"] = "site"
-        send_quick_reply(event.reply_token, "⑤ 現場名を入力してください（スキップ可）", ["スキップ"])
+        ref_sheet.append_row([session["company_head_new"], new_company], table_range="P:Q")
+        reply(event.reply_token, "⑤ 現場名を入力してください（スキップ可）")
 
     elif step == "site":
+        session["site"] = "" if text == "スキップ" else text
         session["step"] = "branch"
         send_quick_reply(event.reply_token, "⑥ 拠点名を選んでください", ["本社", "関東", "前橋", "その他"])
 
     elif step == "branch":
         session["branch"] = text
-        session["step"] = "content"
-        send_quick_reply(event.reply_token, "⑦ 依頼内容を入力してください（スキップ可）", ["スキップ"])
-
-    elif step == "content":
         session["step"] = "worktype"
         send_quick_reply(event.reply_token, "⑧ 施工内容を選んでください", ["洗浄", "清掃", "調査", "工事", "点検", "塗装", "修理"])
 
@@ -152,7 +145,7 @@ def handle_message(event):
     elif step == "month":
         session["month"] = text
         session["step"] = "memo"
-        send_quick_reply(event.reply_token, "⑩ その他特記事項があれば入力してください（スキップ可）", ["スキップ"])
+        reply(event.reply_token, "⑩ その他特記事項があれば入力してください（スキップ可）")
 
     elif step == "memo":
         session["memo"] = "" if text == "スキップ" else text
@@ -166,17 +159,16 @@ def handle_message(event):
                 sheet.update_cell(row, 3, session["inputter_name"])
                 sheet.update_cell(row, 6, session["company"])
                 sheet.update_cell(row, 7, session["branch"])
+                sheet.update_cell(row, 9, session["site"])
                 sheet.update_cell(row, 10, session["month"])
                 sheet.update_cell(row, 12, session["worktype"])
 
-            summary = f"{session['inputter_name']}さんが案件を登録しました！\n\n" \
+            summary = f"{session['sender_name']}さんが案件を登録しました！\n\n" \
                       f"① 入力者：{session['inputter_name']}\n" \
                       f"② 案件進捗：{session['status']}\n" \
                       f"③ 会社名：{session['company']}\n" \
-                      f"④ 元請担当：{session.get('client', '')}\n" \
-                      f"⑤ 現場名：{session.get('site', '')}\n" \
-                      f"⑥ 拠点名：{session.get('branch', '')}\n" \
-                      f"⑦ 依頼内容：{session.get('content', '')}\n" \
+                      f"⑤ 現場名：{session['site']}\n" \
+                      f"⑥ 拠点名：{session['branch']}\n" \
                       f"⑧ 施工内容：{session['worktype']}\n" \
                       f"⑨ 作業月：{session['month']}\n" \
                       f"⑩ その他：{session['memo']}"
@@ -188,7 +180,14 @@ def handle_message(event):
 
 def get_company_list_by_head(head):
     values = ref_sheet.get_all_values()
-    return [row[1] for row in values if row[0] == head and len(row) > 1]
+    return [row[1] for row in values if len(row) >= 2 and row[0] == head]
+
+def get_user_display_name(user_id):
+    try:
+        profile = line_bot_api.get_profile(user_id)
+        return profile.display_name
+    except:
+        return "ユーザー"
 
 def send_quick_reply(token, text, options):
     items = [QuickReplyItem(action=MessageAction(label=opt, text=opt)) for opt in options]
@@ -202,6 +201,7 @@ def reply(token, text):
         reply_token=token,
         messages=[TextMessage(text=text)]
     ))
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
