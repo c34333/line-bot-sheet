@@ -117,7 +117,7 @@ def handle_message(event):
             ref_sheet.update_acell(f'P{next_row}', head)
             ref_sheet.update_acell(f'Q{next_row}', text)
             print(f"DEBUG: 新規会社名 '{text}' を P{next_row} / Q{next_row} に登録")
-                    line_bot_api.reply_message(event.reply_token, TextSendMessage(
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(
                 text=f"新規の会社が登録されました（行番号：{next_row}）"))
         except Exception as e:
             print(f"ERROR: 会社名登録中に例外発生: {e}")
