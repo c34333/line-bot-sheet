@@ -97,6 +97,7 @@ def handle_message(event):
     elif step == "company_select":
         session["company"] = text
         session["step"] = "main_contact"
+        user_sessions[user_id] = session
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"新規の会社が登録されました（行番号：{next_row}）"))
         ask_question(event.reply_token, "main_contact")
         return
@@ -110,8 +111,8 @@ def handle_message(event):
         head = session.get("new_company_head", "")
         try:
             values = ref_sheet.get_all_values()
-            next_row = next(i+1 for i, row in enumerate(values)
-                            if len(row) < 17 or (not row[15].strip() and not row[16].strip()))
+            next_row = next(i + 1 for i, row in enumerate(values)
+                        if (len(row) <= 15 or not row[15].strip()) and (len(row) <= 16 or not row[16].strip()))
             ref_sheet.update_acell(f'P{next_row}', head)
             ref_sheet.update_acell(f'Q{next_row}', text)
             print(f"DEBUG: 新規会社名 '{text}' を P{next_row} / Q{next_row} に登録")
