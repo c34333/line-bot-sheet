@@ -154,8 +154,8 @@ def ask_question(reply_token, step):
         line_bot_api.reply_message(reply_token, TextSendMessage(text=text))
 
 def finalize_and_record(event, session):
-    values = sheet.get_all_values()
-    next_row = next(i+1 for i, row in enumerate(values) if not any(cell.strip() for cell in row))
+    h_col = sheet.col_values(8)
+    next_row = next(i+1 for i, val in enumerate(h_col) if not val.strip())
     no = sheet.cell(next_row, 1).value or f"{next_row}"
     sheet.update_cell(next_row, 2, session.get("status", ""))
     sheet.update_cell(next_row, 3, session.get("inputter", ""))
