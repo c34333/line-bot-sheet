@@ -86,6 +86,10 @@ def handle_message(event):
     session[step] = text if text != "スキップ" else ""
 
     if step == "company_head":
+        if text == "新規":
+            session["step"] = "new_company_name"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="新規会社名を入力してください。"))
+            return
         values = ref_sheet.get_all_values()
         matching = [row[16] for row in values if len(row) >= 17 and row[15] == text]
         session["company_options"] = matching
@@ -131,6 +135,7 @@ def ask_question(reply_token, step):
     print(f"DEBUG: ask_question called with step = {step}")
     messages = {
         "status": ("② 案件進捗を選んでください", ["新規追加", "1:営業中", "2:見込高", "3:受注", "定期", "4:請求待ち"]),
+        "company_head": ("③ 会社名の頭文字を入力してください（ボタン選択または手入力）", ["新規"]),
         "company_head": ("③ 会社名の頭文字を入力してください（新規登録は「新規」）", None),
         "main_contact": ("④ 元請担当を入力してください（スキップ可）", None),
         "site_name": ("⑤ 現場名を入力してください", None),
