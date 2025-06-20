@@ -97,6 +97,7 @@ def handle_message(event):
     elif step == "company_select":
         session["company"] = text
         session["step"] = "main_contact"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"新規の会社が登録されました（行番号：{next_row}）"))
         ask_question(event.reply_token, "main_contact")
         return
     elif step == "new_company_head":
