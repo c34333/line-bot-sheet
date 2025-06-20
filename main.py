@@ -112,6 +112,7 @@ def handle_message(event):
         ref_sheet.update_cell(next_row, 16, head)
         ref_sheet.update_cell(next_row, 17, text)
         session["step"] = "main_contact"
+        print(f"DEBUG: 新規会社名登録 {head} / {text} → 次ステップ main_contact")
         ask_question(event.reply_token, "main_contact")
         return
 
@@ -129,6 +130,7 @@ def handle_message(event):
         del user_sessions[user_id]
 
 def ask_question(reply_token, step):
+    print(f"DEBUG: ask_question called with step = {step}")
     messages = {
         "status": ("② 案件進捗を選んでください", ["新規追加", "1:営業中", "2:見込高", "3:受注", "定期", "4:請求待ち"]),
         "company_head": ("③ 会社名の頭文字を入力してください（新規登録は「新規」）", None),
