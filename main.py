@@ -37,7 +37,7 @@ def callback():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
     try:
-        handler.handle(body, signature)
+                    handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
     return "OK"
@@ -59,6 +59,7 @@ def handle_message(event):
     if command in ["リセット", "キャンセル"]:
         if user_id in user_sessions:
             del user_sessions[user_id]
+            
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="リセットしました。再度コマンドを入力してください。"))
         else:
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="現在、進行中の登録はありません。再度コマンドを入力してください。"))
