@@ -116,8 +116,8 @@ def handle_message(event):
         return
 
     step_order = [
-        "inputter", "status", "company_head", "main_contact", "site_name",
-        "branch", "request_details", "work_details", "work_month", "other_notes"
+        "inputter", "status", "company_head", "new_company_head", "new_company_name",
+        "main_contact", "site_name", "branch", "request_details", "work_details", "work_month", "other_notes"
     ]
 
     next_step_index = step_order.index(step) + 1 if step in step_order else None
