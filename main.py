@@ -111,8 +111,8 @@ def handle_message(event):
             values = ref_sheet.get_all_values()
             next_row = next(i+1 for i, row in enumerate(values)
                             if len(row) < 17 or (not row[15].strip() and not row[16].strip()))
-            ref_sheet.update_cell(next_row, 16, head)
-            ref_sheet.update_cell(next_row, 17, text)
+            ref_sheet.update_acell(f'P{next_row}', head)
+            ref_sheet.update_acell(f'Q{next_row}', text)
             print(f"DEBUG: 新規会社名 '{text}' を P{next_row} / Q{next_row} に登録")
         except Exception as e:
             print(f"ERROR: 会社名登録中に例外発生: {e}")
