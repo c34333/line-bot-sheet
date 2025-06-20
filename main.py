@@ -104,7 +104,7 @@ def handle_message(event):
         session["step"] = "new_company_name"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="新規会社名を入力してください。"))
         return
-    elif step == \"new_company_name\":
+    elif step == "new_company_name":
         session["company"] = text
         head = session.get("new_company_head", "")
         values = ref_sheet.get_all_values()
