@@ -157,12 +157,21 @@ def finalize_and_record(event, session):
     h_col = sheet.col_values(8)
     next_row = next(i+1 for i, val in enumerate(h_col) if not val.strip())
     no = sheet.cell(next_row, 1).value or f"{next_row}"
+
+    # 作業月フォーマット修正
+    raw_month = session.get("work_month", "")
+    formatted_month = ""
+    if raw_month.endswith("月"):
+        month_num = int(raw_month.replace("月", ""))
+        year = datetime.now().year
+        formatted_month = f"{year}年{month_num}月"
+
     sheet.update_cell(next_row, 2, session.get("status", ""))
     sheet.update_cell(next_row, 3, session.get("inputter", ""))
     sheet.update_cell(next_row, 6, session.get("company", ""))
     sheet.update_cell(next_row, 7, session.get("branch", ""))
     sheet.update_cell(next_row, 9, session.get("site_name", ""))
-    sheet.update_cell(next_row, 10, session.get("work_month", ""))
+    sheet.update_cell(next_row, 10, formatted_month or raw_month)
     sheet.update_cell(next_row, 13, session.get("work_details", ""))
 
     report_to = event.source.user_id if session.get("test_mode") else report_group_id
@@ -170,7 +179,7 @@ def finalize_and_record(event, session):
     summary += f"入力者：{session.get('inputter','')}\n進捗：{session.get('status','')}\n会社名：{session.get('company','')}\n"
     summary += f"担当名：{session.get('main_contact','')}\n現場名：{session.get('site_name','')}\n拠点：{session.get('branch','')}\n"
     summary += f"依頼内容：{session.get('request_details','')}\n施工内容：{session.get('work_details','')}\n"
-    summary += f"作業月：{session.get('work_month','')}\nその他：{session.get('other_notes','')}"
+    summary += f"作業月：{formatted_month or raw_month}\nその他：{session.get('other_notes','')}"
     line_bot_api.push_message(report_to, TextSendMessage(text=summary))
 
 def send_quick_reply(token, text, options):
