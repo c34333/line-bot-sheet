@@ -37,7 +37,7 @@ def callback():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
     try:
-                    handler.handle(body, signature)
+                                handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
     return "OK"
@@ -59,6 +59,7 @@ def handle_message(event):
     if command in ["リセット", "キャンセル"]:
         if user_id in user_sessions:
             del user_sessions[user_id]
+            
             
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="リセットしました。再度コマンドを入力してください。"))
         else:
@@ -116,8 +117,8 @@ def handle_message(event):
             ref_sheet.update_acell(f'P{next_row}', head)
             ref_sheet.update_acell(f'Q{next_row}', text)
             print(f"DEBUG: 新規会社名 '{text}' を P{next_row} / Q{next_row} に登録")
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(
-            text=f"新規の会社が登録されました（行番号：{next_row}）"))
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(
+                text=f"新規の会社が登録されました（行番号：{next_row}）"))
         except Exception as e:
             print(f"ERROR: 会社名登録中に例外発生: {e}")
 
