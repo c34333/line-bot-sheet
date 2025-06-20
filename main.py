@@ -88,10 +88,11 @@ def handle_message(event):
             session["step"] = "new_company_head"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="新規会社名の頭文字を入力してください。"))
         else:
-            matching = [ref_sheet.cell(i + 1, 17).value for i in range(2000) if ref_sheet.cell(i + 1, 16).value == text]
+            values = ref_sheet.get_all_values()
+            matching = [row[16] for row in values if len(row) >= 17 and row[15] == text]
             session["company_options"] = matching
             session["step"] = "company_select"
-            send_quick_reply(event.reply_token, "③ 会社名を選んでください", matching[:12])
+            send_quick_reply(event.reply_token, "③ 会社名を選んでください", matching[:12] or ["該当なし"])
         return
     elif step == "company_select":
         session["company"] = text
@@ -134,7 +135,6 @@ def handle_message(event):
         finalize_and_record(event, session)
         del user_sessions[user_id]
 
-
 def ask_question(reply_token, step):
     messages = {
         "status": ("② 案件進捗を選んでください", ["新規追加", "1:営業中", "2:見込高", "3:受注", "定期", "4:請求待ち"]),
@@ -152,7 +152,6 @@ def ask_question(reply_token, step):
         send_quick_reply(reply_token, text, options)
     else:
         line_bot_api.reply_message(reply_token, TextSendMessage(text=text))
-
 
 def finalize_and_record(event, session):
     values = sheet.get_all_values()
@@ -174,13 +173,11 @@ def finalize_and_record(event, session):
     summary += f"作業月：{session.get('work_month','')}\nその他：{session.get('other_notes','')}"
     line_bot_api.push_message(report_to, TextSendMessage(text=summary))
 
-
 def send_quick_reply(token, text, options):
     quick_reply = QuickReply(items=[
         QuickReplyButton(action=MessageAction(label=opt, text=opt)) for opt in options
     ])
     line_bot_api.reply_message(token, TextSendMessage(text=text, quick_reply=quick_reply))
-
 
 def get_user_display_name(user_id):
     try:
