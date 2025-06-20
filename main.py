@@ -104,7 +104,7 @@ def handle_message(event):
         session["step"] = "new_company_name"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="新規会社名を入力してください。"))
         return
-    elif step == "new_company_name":
+    elif step == \"new_company_name\":
         session["company"] = text
         head = session.get("new_company_head", "")
         values = ref_sheet.get_all_values()
@@ -112,6 +112,7 @@ def handle_message(event):
         ref_sheet.update_cell(next_row, 16, head)
         ref_sheet.update_cell(next_row, 17, text)
         session["step"] = "main_contact"
+        user_sessions[user_id] = session
         print(f"DEBUG: 新規会社名登録 {head} / {text} → 次ステップ main_contact")
         ask_question(event.reply_token, "main_contact")
         return
