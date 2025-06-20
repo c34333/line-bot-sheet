@@ -106,18 +106,11 @@ def handle_message(event):
         return
     elif step == "new_company_name":
         session["company"] = text
-        session["step"] = "new_company_closing"
-        send_quick_reply(event.reply_token, "締め日を選んでください", ["不明", "月末", "20日", "5日", "10日", "15日", "25日", "5・20日"])
-        return
-    elif step == "new_company_closing":
         head = session.get("new_company_head", "")
-        name = session.get("company", "")
-        closing = text
         values = ref_sheet.get_all_values()
         next_row = next(i+1 for i, row in enumerate(values) if len(row) < 17 or (not row[15].strip() and not row[16].strip()))
         ref_sheet.update_cell(next_row, 16, head)
-        ref_sheet.update_cell(next_row, 17, name)
-        ref_sheet.update_cell(next_row, 18, closing)
+        ref_sheet.update_cell(next_row, 17, text)
         session["step"] = "main_contact"
         ask_question(event.reply_token, "main_contact")
         return
