@@ -114,7 +114,7 @@ def handle_message(event):
         name = session.get("company", "")
         closing = text
         values = ref_sheet.get_all_values()
-        next_row = next(i+1 for i, row in enumerate(values) if not row[15].strip() and not row[16].strip())
+        next_row = next(i+1 for i, row in enumerate(values) if len(row) < 17 or (not row[15].strip() and not row[16].strip()))
         ref_sheet.update_cell(next_row, 16, head)
         ref_sheet.update_cell(next_row, 17, name)
         ref_sheet.update_cell(next_row, 18, closing)
@@ -158,7 +158,6 @@ def finalize_and_record(event, session):
     next_row = next(i+1 for i, val in enumerate(h_col) if not val.strip())
     no = sheet.cell(next_row, 1).value or f"{next_row}"
 
-    # 作業月フォーマット修正
     raw_month = session.get("work_month", "")
     formatted_month = ""
     if raw_month.endswith("月"):
