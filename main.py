@@ -128,7 +128,7 @@ def handle_message(event):
         session["step"] = step_order[next_step_index]
         ask_question(event.reply_token, step_order[next_step_index])
     else:
-        finalize_and_record(event, session)
+        finalize_and_record(event, session, user_id)
         del user_sessions[user_id]
 
 def ask_question(reply_token, step):
@@ -150,7 +150,7 @@ def ask_question(reply_token, step):
     else:
         line_bot_api.reply_message(reply_token, TextSendMessage(text=text))
 
-def finalize_and_record(event, session):
+def finalize_and_record(event, session, user_id):
     h_col = sheet.col_values(8)
     next_row = next(i+1 for i, val in enumerate(h_col) if not val.strip())
     no = sheet.cell(next_row, 1).value or f"{next_row}"
