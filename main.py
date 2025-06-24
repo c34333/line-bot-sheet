@@ -27,7 +27,7 @@ credentials_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, scope)
 gc = gspread.authorize(credentials)
 
-sheet = gc.open_by_key('1Y3-XMKstJIfqBd55JtIdB4Ymx9zs6DFQo2U78fuFyME').worksheet('基本入力')
+sheet = gc.open_by_key('1Y3-XMKstJIfqBd55JtIdB4Ymx9zs6DFQo2U78fuFyME').worksheet('登録テスト')
 ref_sheet = gc.open_by_key('1Y3-XMKstJIfqBd55JtIdB4Ymx9zs6DFQo2U78fuFyME').worksheet('参照値')
 
 user_sessions = {}
