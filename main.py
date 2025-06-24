@@ -136,7 +136,6 @@ def ask_question(reply_token, step):
     messages = {
         "status": ("② 案件進捗を選んでください", ["新規追加", "1:営業中", "2:見込高", "3:受注", "定期", "4:請求待ち"]),
         "company_head": ("③ 会社名の頭文字を入力してください（ボタン選択または手入力）", ["新規"]),
-        "company_head": ("③ 会社名の頭文字を入力してください（新規登録は「新規」）", None),
         "main_contact": ("④ 元請担当を入力してください", ["スキップ"]),
         "site_name": ("⑤ 現場名を入力してください", ["スキップ"]),
         "branch": ("⑥ 拠点名を選んでください", [":本社", ":関東", ":前橋", "未定"]),
@@ -171,7 +170,7 @@ def finalize_and_record(event, session):
     sheet.update_cell(next_row, 10, formatted_month or raw_month)
     sheet.update_cell(next_row, 13, session.get("work_details", ""))
 
-    report_to = event.source.user_id if session.get("test_mode") else report_group_id
+    report_to = user_id if session.get("test_mode") else report_group_id
     summary = f"{session.get('sender_name', session.get('inputter', 'ユーザー'))}さんが案件を登録しました。（案件番号：{no}）\n"
     summary += f"入力者：{session.get('inputter','')}\n進捗：{session.get('status','')}\n会社名：{session.get('company','')}\n"
     summary += f"担当名：{session.get('main_contact','')}\n現場名：{session.get('site_name','')}\n拠点：{session.get('branch','')}\n"
